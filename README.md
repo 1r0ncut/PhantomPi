@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/phantompi-logo.png" alt="PhantomPi Logo" width="400"/>
+  <img src="docs/images/phantompi-logo.png" alt="PhantomPi Logo"/>
 </p>
 
-<h1 align="center">PhantomPi</h1>
+<h1 align="center">PhantomPi: A Covert Red Team Implant</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/PLATFORM-Raspberry_Pi_4-C51A4A?style=flat-square" alt="Platform"/>
@@ -12,12 +12,7 @@
 </p>
 
 <p align="center">
-  <strong>Covert network implant for physical red team engagements.</strong><br>
-  Transparent Layer 2 bridging with 802.1X bypass, identity spoofing, and out-of-band LTE control.
-</p>
-
-<p align="center">
-  Built by <a href="https://1r0ncut.github.io/"><strong>Alessandro Tagliafierro</strong></a> at <a href="https://www.inthecyber.com/"><strong>InTheCyber Group</strong></a>
+  <sub><i>Developed during my work at <a href="https://www.inthecyber.com/">InTheCyber Group</a></i></sub>
 </p>
 
 <p align="center">
