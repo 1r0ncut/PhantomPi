@@ -116,13 +116,13 @@ The implant is built by stacking the boards and modules using M2.5 spacers of sp
 
 ```mermaid
 flowchart TB
-    WG[WireGuard ServerOperator VPS]
+    WG["WireGuard Server (Operator VPS)"]
     
     subgraph PhantomPi
         eth0[eth0]
         br0[br0]
-        eth1[eth1LTE]
-        wg0[wg0VPN]
+        eth1["eth1 (LTE)"]
+        wg0["wg0 (WireGuard VPN)"]
         eth2[eth2]
         
         eth0 --- br0
@@ -130,8 +130,8 @@ flowchart TB
         eth1 --- wg0
     end
     
-    SW[CorporateSwitch] --- eth0
-    eth2 --- DEV[Inline DeviceWorkstation]
+    SW["CorporateSwitch"] --- eth0
+    eth2 --- DEV["Inline Device (e.g. Workstation)"]
     wg0 ---|4G/LTE| WG
 ```
 
