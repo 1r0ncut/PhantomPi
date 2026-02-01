@@ -130,7 +130,7 @@ flowchart TB
         eth1 --- wg0
     end
     
-    SW["CorporateSwitch"] --- eth0
+    SW["Corporate Switch"] --- eth0
     eth2 --- DEV["Inline Device (e.g. Workstation)"]
     wg0 ---|4G/LTE| WG
 ```
