@@ -169,7 +169,9 @@ flowchart TB
 
 ## 3D Enclosure
 
-> 🚧 **Under Construction**
-> 
-> STL files coming soon. Dimensions: 140×100×100 mm with RJ45, USB-C, and SMA pass-throughs.
+STL files for the custom 3D-printed case:
 
+| File | Description |
+|------|-------------|
+| [`phantompi-implant-case.stl`](docs/3d-models/phantompi-implant-case.stl) | Main enclosure (body + cover) |
+| [`usb-to-eth-adapter-hat.stl`](docs/3d-models/usb-to-eth-adapter-hat.stl) | USB-to-Ethernet adapter mount |
