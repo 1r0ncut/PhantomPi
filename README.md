@@ -114,28 +114,25 @@ The implant is built by stacking the boards and modules using M2.5 spacers of sp
 
 ## Architecture
 
-```
-                              ┌──────────────────────┐
-                              │   WireGuard Server   │
-                              │   (Operator VPS)     │
-                              └──────────┬───────────┘
-                                         │ 4G/LTE
-                                         │
-┌────────────┐    ┌──────────────────────┼───────────────────────┐
-│  Corporate │    │                  PhantomPi                   │
-│   Switch   │    │  ┌─────┐    ┌─────┐  │ ┌──────┐    ┌─────┐   │
-│            │    │  │eth0 │────│ br0 │  │ │ eth1 │────│ wg0 │   │
-│    [G1]────┼────┼──┤     │    │     │  │ │(LTE) │    │(VPN)│   │
-│            │    │  └─────┘    └──┬──┘  │ └──────┘    └─────┘   │
-│            │    │                │     │                       │
-│            │    │            ┌───┴───┐ │                       │
-│            │    │            │ eth2  │ │                       │
-└────────────┘    └────────────┼───────┼─┴───────────────────────┘
-                               │       │
-                          ┌────┴───────┴────┐
-                          │  Inline Device  │
-                          │  (Workstation)  │
-                          └─────────────────┘
+```mermaid
+flowchart TB
+    WG[WireGuard ServerOperator VPS]
+    
+    subgraph PhantomPi
+        eth0[eth0]
+        br0[br0]
+        eth1[eth1LTE]
+        wg0[wg0VPN]
+        eth2[eth2]
+        
+        eth0 --- br0
+        br0 --- eth2
+        eth1 --- wg0
+    end
+    
+    SW[CorporateSwitch] --- eth0
+    eth2 --- DEV[Inline DeviceWorkstation]
+    wg0 ---|4G/LTE| WG
 ```
 
 ### Software Components
