@@ -1,0 +1,15 @@
+[Unit]
+Description=BruteShark Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/implant/scripts/BruteShark/bruteshark.py
+Restart=always
+User=root
+Environment=DOTNET_ROOT=/root/.dotnet
+Environment=PATH=/root/.dotnet:/usr/local/bin:/usr/bin:/bin
+Environment=DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+WorkingDirectory=/opt/implant/logs/bruteshark
+
+[Install]
+WantedBy=multi-user.target

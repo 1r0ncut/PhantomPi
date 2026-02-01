@@ -1,0 +1,9 @@
+[Unit]
+Description=WireGuard KeepAlive
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/implant/scripts/wg-keepalive.sh
+User=root

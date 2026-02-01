@@ -1,0 +1,16 @@
+[xxxx-xx-xx xx:xx:xx] Witty Pi daemon (v4.21) is started.
+[xxxx-xx-xx xx:xx:xx] System: Kali GNU/Linux Rolling, Kernel: Linux 6.12.34+rpt-rpi-v8, Architecture: arm64
+[xxxx-xx-xx xx:xx:xx] Running on Raspberry Pi 4 Model B Rev 1.5
+[xxxx-xx-xx xx:xx:xx] Witty Pi is not detected, retry in one second...
+[xxxx-xx-xx xx:xx:xx] RTC offset register has value 0x79
+[xxxx-xx-xx xx:xx:xx] RTC has bad time, write system time into RTC
+[xxxx-xx-xx xx:xx:xx] Writing system time to RTC...
+<2025-07-28 19:31:39> Done :-)
+<2025-07-28 19:31:39> Firmware ID: 0x26
+<2025-07-28 19:31:39> Firmware Revison: 0x07
+<2025-07-28 19:31:39> Current Vout=4.92V, Iout=1.16A
+<2025-07-28 19:31:39> System starts up because the button is clicked.
+<2025-07-28 19:31:44> Send out the SYS_UP signal via GPIO-17 pin.
+[2025-07-28 19:31:45] File "schedule.wpi" not found, skip running schedule script.
+<2025-07-28 19:31:45> Pending for incoming shutdown command...
+[2025-07-28 19:46:36] Set to "Default ON"!

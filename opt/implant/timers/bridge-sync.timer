@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically check and sync br0 bridge
+
+[Timer]
+OnBootSec=1s
+OnUnitActiveSec=5s
+Unit=bridge-sync.service
+
+[Install]
+WantedBy=timers.target

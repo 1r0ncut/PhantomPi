@@ -1,0 +1,18 @@
+[Unit]
+Description=Implant Flask HTTPS Server for Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/implant/discord
+ExecStart=/opt/implant/discord/venv/bin/gunicorn \
+    --certfile=certs/cert.pem \
+    --keyfile=certs/key.pem \
+    --bind 10.8.0.3:8443 \
+    wsgi:app
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=Sync bridge br0 if both eth1 and eth2 are available
+
+[Service]
+Type=oneshot
+ExecStart=/opt/implant/scripts/bridge-sync.sh

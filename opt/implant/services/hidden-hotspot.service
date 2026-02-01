@@ -1,0 +1,17 @@
+[Unit]
+Description=Hidden Wi-Fi Hotspot
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/implant/scripts/hidden-hotspot.sh start
+ExecStop=/opt/implant/scripts/hidden-hotspot.sh stop
+RemainAfterExit=yes
+PermissionsStartOnly=true
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=20
+User=root
+
+[Install]
+WantedBy=multi-user.target

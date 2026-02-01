@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>UUGear Web Interface (UWI)</title>
+    <meta name="viewport" content="width=700">
+    <link rel="stylesheet" type="text/css" href="../common/css/jquery-ui.css">
+    <link rel="stylesheet" type="text/css" href="../common/css/common.css">
+    <script type="text/javascript" src="../uwi.conf"></script>
+    <script type="text/javascript" src="../common/js/jquery.js"></script>
+    <script type="text/javascript" src="../common/js/jquery-ui.js"></script>
+    <script type="text/javascript" src="../common/js/common.js"></script>
+  </head>
+  <body>
+  <div class="content">
+  <H1>UUGear Web Interface (UWI)</H1>
+	<p class='headline'>Available Devices: </p>
+	<div class='deviceButton rpi' style='display:none'><img class='thumb' src='rpi/img/thumb.png'></img>Raspberry Pi (GPIO)<div class='info'>Model: ------</div></div>
+	<div class='deviceButton wittypi3' style='display:none'><img class='thumb' src='wittypi3/img/thumb.png'></img><span class='title'>Witty Pi 3</span><div class='info'>RTC and power management (full sized or mini version)</div></div>
+  <div class='deviceButton wittypi4' style='display:none'><img class='thumb' src='wittypi4/img/thumb.png'></img><span class='title'>Witty Pi 4</span><div class='info'>Realtime clock and power management</div></div>
+	<div class='deviceButton zero2go' style='display:none'><img class='thumb' src='zero2go/img/thumb.png'></img>Zero2Go Omini<div class='info'>Multi-channel, wide input range power supply</div></div>
+	<div class='deviceButton mega4' style='display:none'><img class='thumb' src='mega4/img/thumb.png'></img>MEGA4<div class='info'>4-Port USB 3.1 PPPS (Per-Port Power Switching) Hub</div></div>
+	<div class='deviceButton pgnano' style='display:none'><img class='thumb' src='pgnano/img/thumb.png'></img>PiGear Nano<div class='info'>Nano-ITX Raspberry Pi Compute Module 4 Carrier Board</div></div>
+  </div>
+  <script>
+  $(document).ready(function(){
+    sharedWS.addCompositeTask([
+      { msg: 'rpi|api_get_rpi_model', callback: function(event) {
+        $('.rpi .info').text('Model: ' + event.data);
+        if (event.data.indexOf('Model A') !== -1 || event.data.indexOf('Model B') !== -1) {
+           $('.deviceButton.rpi').css('display', 'block');
+        }
+      }},
+      { msg: 'wittypi3|api_has_hardware', callback: function(event) {
+        $('.deviceButton.wittypi3').css("display", event.data != 'yes' ? 'none' : 'block');
+      }},
+      { msg: 'wittypi3|api_is_rev2', callback: function(event) {
+      	if (event.data == 'yes') {
+        	$('.deviceButton.wittypi3 .title').text('Witty Pi 3 (Rev2)');
+        	$('.deviceButton.wittypi3 .info').text('RTC and power management (reversion 2)');
+        }
+      }},
+      { msg: 'wittypi4|api_has_hardware', callback: function(event) {
+        $('.deviceButton.wittypi4').css("display", event.data == 'no' ? 'none' : 'block');
+        if (event.data == 'mini') {
+          $('.deviceButton.wittypi4 .title').text('Witty Pi 4 Mini');
+          $('.deviceButton.wittypi4 .thumb').attr('src', 'wittypi4/img/thumb_mini.png');
+        } else if (event.data == 'l3v7') {
+          $('.deviceButton.wittypi4 .title').text('Witty Pi 4 L3V7');
+          $('.deviceButton.wittypi4 .thumb').attr('src', 'wittypi4/img/thumb_l3v7.png');
+        }
+      }},
+      { msg: 'zero2go|api_has_hardware', callback: function(event) {
+        $('.deviceButton.zero2go').css("display", event.data != 'yes' ? 'none' : 'block');
+      }},
+      { msg: 'mega4|api_has_hardware', callback: function(event) {
+        $('.deviceButton.mega4').css("display", event.data != 'yes' ? 'none' : 'block');
+      }},
+      { msg: 'pgnano|api_has_hardware', callback: function(event) {
+        $('.deviceButton.pgnano').css("display", event.data != 'yes' ? 'none' : 'block');
+        if (event.data == 'yes') {
+          $('.deviceButton.mega4').css('display', 'none');
+        }
+      }}
+    ]);
+    
+    $('.rpi').click(function(){
+    	window.open('rpi', '_self');
+    });
+    $('.wittypi3').click(function(){
+    	window.open('wittypi3', '_self');
+    });
+    $('.wittypi4').click(function(){
+    	window.open('wittypi4', '_self');
+    });
+    $('.zero2go').click(function(){
+    	window.open('zero2go', '_self');
+    });
+    $('.mega4').click(function(){
+    	window.open('mega4', '_self');
+    });
+    $('.pgnano').click(function(){
+    	window.open('pgnano', '_self');
+    });
+  });
+  footer();
+  </script>
+  </body>
+</html>

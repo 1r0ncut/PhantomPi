@@ -1,0 +1,8 @@
+[Unit]
+Description=Power Monitor
+Wants=power-monitor.timer
+
+[Service]
+Type=oneshot
+ExecStart=/opt/implant/scripts/power-monitor.sh
+User=root

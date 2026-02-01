@@ -1,0 +1,12 @@
+[Unit]
+Description=WireGuard KeepAlive
+After=network.target
+Wants=network.target
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1min
+Unit=wg-keepalive.service
+
+[Install]
+WantedBy=timers.target

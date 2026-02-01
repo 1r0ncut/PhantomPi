@@ -1,0 +1,10 @@
+[Unit]
+Description=Run power monitor periodically
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=15
+Unit=power-monitor.service
+
+[Install]
+WantedBy=timers.target

