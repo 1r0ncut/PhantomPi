@@ -34,8 +34,12 @@
 - Capturing network traffic and harvesting credentials in real-time
 - Maintaining persistent access via 4G/LTE out-of-band channel
 
-> 📖 **Technical Deep Dive**: [Part 1](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-1-8976a72c34d0) — Hardware, WireGuard, Discord bot | [Part 2](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-2-d74493d731ee) — Bridge mode, 802.1X bypass, spoofing
-
+> [!NOTE]
+> **📖 Technical Deep Dive on Medium**
+> 
+> [**Part 1**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-1-8976a72c34d0) — Hardware assembly, LTE modem configuration, WireGuard VPN, Resilience measures, Discord C2 bot
+> 
+> [**Part 2**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-2-d74493d731ee) — Bridge mode, traffic interception, 802.1X/NAC bypass, identity spoofing
 
 ## Features
 
