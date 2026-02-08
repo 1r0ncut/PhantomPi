@@ -58,7 +58,7 @@
 #### Core Modules
 | Component | Link |
 |-----------|------|
-| Raspberry Pi 4 – Model B | [Amazon](https://amzn.eu/d/0gWOVFli) |
+| Raspberry Pi 4 – Model B | [Amazon](https://amzn.eu/d/08y3z1Lm) |
 | Waveshare 4G HAT (SIM7600G-H) | [Amazon](https://www.amazon.it/dp/B0824P4B7M) |
 | PoE HAT Module | [Amazon](https://www.amazon.it/dp/B0928ZD7QQ) |
 | Witty Pi 4 (RTC & Power Management) | [UUGear](https://www.uugear.com/product/witty-pi-4/) |
