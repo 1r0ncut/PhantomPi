@@ -39,7 +39,7 @@
 > 
 > [**Part 1**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-1-8976a72c34d0) — Hardware assembly, LTE modem configuration, WireGuard VPN, Resilience measures, Discord C2 bot
 > 
-> [**Part 2**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-2-d74493d731ee) — Bridge mode, traffic interception, 802.1X/NAC bypass, identity spoofing
+> [**Part 2**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-2-d74493d731ee) — Bridge mode, traffic interception, 802.1X/NAC bypass, identity spoofing, 3D-printed enclosure
 
 ## Features
 
@@ -58,7 +58,7 @@
 #### Core Modules
 | Component | Link |
 |-----------|------|
-| Raspberry Pi 4 – Model B | [Amazon](https://www.amazon.it/Raspberry-Pi-4595-Modello-B) |
+| Raspberry Pi 4 – Model B | [Amazon](https://amzn.eu/d/0gWOVFli) |
 | Waveshare 4G HAT (SIM7600G-H) | [Amazon](https://www.amazon.it/dp/B0824P4B7M) |
 | PoE HAT Module | [Amazon](https://www.amazon.it/dp/B0928ZD7QQ) |
 | Witty Pi 4 (RTC & Power Management) | [UUGear](https://www.uugear.com/product/witty-pi-4/) |
