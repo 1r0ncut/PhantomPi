@@ -41,6 +41,47 @@
 > 
 > [**Part 2**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-2-d74493d731ee) — Bridge mode, traffic interception, 802.1X/NAC bypass, identity spoofing, 3D-printed enclosure
 
+<div align="center">
+
+<img src="docs/images/outside.jpg" width="70%" alt="PhantomPi"/>
+
+<br/><br/>
+
+<details>
+<summary>📸 View full gallery</summary>
+<br/>
+
+<table width="100%">
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/images/components.jpg" width="100%"/>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/images/inside.jpg" width="100%" alt="Assembled"/>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/images/assembled.jpg" width="100%" alt="Back"/>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/images/front.jpg" width="100%" alt="Outside"/>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/images/upside.jpg" width="100%" alt="Back"/>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/images/back.jpg" width="100%" alt="Outside"/>
+    </td>
+  </tr>
+</table>
+
+</details>
+
+</div>
+
 ## Features
 
 | Capability | Description |
