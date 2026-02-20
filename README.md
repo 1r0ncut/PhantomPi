@@ -43,6 +43,8 @@
 
 ### Gallery
 
+---
+
 <div align="center">
 
 <img src="docs/images/outside.jpg" width="100%" alt="PhantomPi"/>
@@ -50,7 +52,7 @@
 <br/>
 
 <details>
-<summary>📸 View full gallery</summary>
+<summary><b>📸 View full gallery<b></summary>
 <br/>
 
 <table width="100%">
