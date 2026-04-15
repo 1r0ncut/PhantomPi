@@ -20,7 +20,7 @@
   <a href="#hardware">Hardware</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#installation">Installation</a> •
-  <a href="#usage">Usage</a>
+  <a href="#3d-enclosure">3D Enclosure</a>
 </p>
 
 ---
@@ -151,7 +151,7 @@ The implant is built by stacking the boards and modules using M2.5 spacers of sp
 | Top Screws on Printed HAT | M2.5 Screws | — |
 | Case Cover Screws | M2.6 Screws | — |
 
-> ⚠️ **USB Port Assignment**: The LTE module and USB-to-Ethernet adapter must be connected to specific USB ports to ensure consistent interface naming (`eth1`, `eth2`). See documentation for port mapping.
+> ⚠️ **USB Port Assignment**: The LTE module and USB-to-Ethernet adapter must be connected to specific USB ports to ensure consistent interface naming (`eth1`, `eth2`). See [USB port mapping](https://medium.com/inthecyber-posts/phantompi-a-covert-red-team-implant-part-2-d74493d731ee#0db1) in the Part 2 article.
 
 ### Interface Mapping
 
@@ -184,7 +184,38 @@ flowchart TB
     wg0 ---|4G/LTE| WG
 ```
 
-### Software Components
+## Installation
+
+> [!IMPORTANT]
+> These scripts have been tested only on the exact hardware and software configuration detailed in this repository and in the Medium articles. Other setups may require adjustments.
+
+### Implant (Raspberry Pi)
+
+1. Flash **Kali Linux ARM** onto the Raspberry Pi 4 SD card
+2. Clone this repository and fill in the configuration:
+   ```bash
+   git clone https://github.com/1r0ncut/PhantomPi.git
+   cd PhantomPi/implant
+   nano setup/init.json          # fill WireGuard, LTE, hotspot, Discord values
+   ```
+3. Run the setup script:
+   ```bash
+   sudo bash setup.sh
+   ```
+4. Reboot the implant:
+   ```bash
+   sudo reboot
+   ```
+
+> Use `sudo bash setup.sh --debug` for verbose output, or `--skip-bruteshark` to skip the .NET build.
+>
+> To undo everything and re-run from scratch:
+> ```bash
+> sudo bash setup/reset.sh          # quick reset (keeps WG keys)
+> sudo bash setup/reset.sh --full   # full reset (removes everything)
+> ```
+
+#### Resulting Filesystem Layout
 
 ```
 /opt/implant/
@@ -199,22 +230,46 @@ flowchart TB
 │   └── BruteShark/         # Credential extraction
 ├── services/               # systemd units
 ├── timers/                 # systemd timers
+├── wittypi/                # Witty Pi 4 power management + UWI
 └── discord/                # Implant-side API (Flask/Gunicorn)
 ```
 
-## Installation
+### VPS (Operator Server)
 
-> 🚧 **Under Construction**
-> 
-> Automated installation scripts and detailed setup guides are being developed.
-> Check the Medium articles for manual configuration steps.
+1. Clone this repository on your VPS and fill in the configuration:
+   ```bash
+   git clone https://github.com/1r0ncut/PhantomPi.git
+   cd PhantomPi/vps
+   nano setup/init.json          # fill Discord token, guild ID, WireGuard peers
+   ```
+2. Run the setup script:
+   ```bash
+   sudo bash setup.sh
+   ```
+3. Verify:
+   ```bash
+   wg show
+   systemctl status discord-bot
+   ```
 
-## Usage
+> To undo everything and re-run from scratch:
+> ```bash
+> sudo bash setup/reset.sh          # quick reset (keeps WG keys)
+> sudo bash setup/reset.sh --full   # full reset (removes everything)
+> ```
 
-> 🚧 **Under Construction**
-> 
-> Detailed usage documentation is being developed.
-> Check the Medium articles for operational guidance.
+#### Resulting Filesystem Layout
+
+```
+/opt/implant/
+├── discord/                # Discord C2 bot (discord.py)
+│   ├── bot.py
+│   ├── commands/
+│   ├── config.py           
+│   ├── venv/               
+│   └── logs/
+└── services/               # systemd units
+```
 
 ## 3D Enclosure
 

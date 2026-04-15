@@ -1,0 +1,22 @@
+{
+    "_readme": "VPS WireGuard & Discord Bot — Configuration. Fill values below, then run: sudo bash setup.sh",
+
+    "discord": {
+        "_comment": "Bot credentials from https://discord.com/developers/applications",
+        "bot_token": "",
+        "guild_id": ""
+    },
+
+    "wireguard": {
+        "_comment": "WireGuard server. If private_key is empty a new key pair is generated. Add one entry per implant/peer in the peers array.",
+        "private_key": "",
+        "server_address": "10.8.0.1/24",
+        "listen_port": 51820,
+        "peers": [
+            {
+                "public_key": "",
+                "allowed_ips": "10.8.0.3/32"
+            }
+        ]
+    }
+}

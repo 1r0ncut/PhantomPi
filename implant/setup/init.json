@@ -1,0 +1,60 @@
+{
+    "_readme": "PhantomPi Implant Configuration. Fill values below, then run: sudo bash setup.sh",
+
+    "network": {
+        "_comment": "Interface roles and USB port paths. Defaults match standard PhantomPi wiring.",
+        "iface_company": "eth0",
+        "iface_target": "eth2",
+        "lte_interface": "eth1",
+        "bridge": "br0",
+        "veth_in": "veth0",
+        "veth_out": "veth1",
+        "lte_modem_usb_path": "1-1.3",
+        "usb_eth_adapter_usb_path": "2-1"
+    },
+
+    "wireguard": {
+        "_comment": "VPN tunnel to operator VPS. server_public_key, server_public_ip and server_port are REQUIRED. If implant_private_key is empty a new key pair is generated automatically.",
+        "implant_address": "10.8.0.3/24",
+        "implant_private_key": "",
+        "server_public_key": "",
+        "server_public_ip": "",
+        "server_port": 51820,
+        "allowed_ips": "10.8.0.0/24",
+        "persistent_keepalive": 25
+    },
+
+    "keepalive": {
+        "_comment": "WireGuard reachability monitor. server_ip is the VPN-side IP of the WG server.",
+        "ping_attempts": 10,
+        "server_ip": "10.8.0.1"
+    },
+
+    "lte": {
+        "_comment": "Cellular modem settings. Set the APN for your SIM provider.",
+        "apn": "",
+        "serial_device": "/dev/ttyUSB2"
+    },
+
+    "hotspot": {
+        "_comment": "Emergency hidden WiFi AP. PSK must be at least 8 characters.",
+        "ssid": "berry_ap",
+        "psk": "",
+        "interface": "wlan0",
+        "hidden": true
+    },
+
+    "discord": {
+        "_comment": "Webhook URLs for Discord notifications. Leave empty to disable.",
+        "bridge_sync_webhook_url": "",
+        "bruteshark_webhook_url": "",
+        "notify": true
+    },
+
+    "sniffer": {
+        "_comment": "Packet capture settings for inline traffic interception on eth2.",
+        "file_prefix": "capture",
+        "max_file_size_mb": 200,
+        "max_total_files": 5
+    }
+}
