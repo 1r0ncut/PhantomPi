@@ -219,6 +219,7 @@ success "Logrotate configs removed"
 info "Removing helper symlinks ..."
 rm -f /usr/local/bin/hidden-hotspot
 rm -f /usr/local/bin/modem-config
+rm -f /usr/local/bin/spoof-target
 success "Helper symlinks removed"
 
 # ── 11. Full-mode extras ─────────────────────────────────────────────────

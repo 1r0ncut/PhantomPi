@@ -48,6 +48,7 @@ _EXEC_SCRIPTS = [
 _HELPER_LINKS = {
     "hidden-hotspot": "/opt/implant/scripts/hidden-hotspot.sh",
     "modem-config":   "/opt/implant/scripts/modem-config.sh",
+    "spoof-target":   "/opt/implant/scripts/spoof-target.sh",
 }
 
 
