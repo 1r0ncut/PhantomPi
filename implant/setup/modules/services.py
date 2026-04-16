@@ -562,9 +562,11 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
     # I2C register 17 (I2C_CONF_DEFAULT_ON) on bus 1, address 0x08:
     #   0x00 = Default OFF (button press required to power on)
     #   0x01 = Default ON  (auto-power when supply is connected)
+    # Uses Witty Pi's own i2c_write (write + verify + retry up to 4x)
+    # instead of raw i2cset which silently fails if the MCU is busy.
     ui.info("Setting Witty Pi to 'Default ON' (auto-power) ...")
     ui.run(
-        "i2cset -y 1 0x08 17 0x01 2>/dev/null || true",
+        "cd /opt/implant/wittypi/wittypi && source utilities.sh && i2c_write 0x01 $I2C_MC_ADDRESS $I2C_CONF_DEFAULT_ON 0x01",
         check=False,
     )
     ui.success("Witty Pi set to Default ON (register 17 = 0x01)")
