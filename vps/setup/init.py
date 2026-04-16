@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -33,9 +34,11 @@ REPO_DIR  = os.path.dirname(SETUP_DIR)
 
 TOTAL_STEPS = 4
 
-OPENCLAW_DIR = "/opt/openclaw"
+OPENCLAW_DIR = "/opt/implant/openclaw"
 SKILLS_DIR   = os.path.join(OPENCLAW_DIR, "skills")
-OPENCLAW_HOME = os.path.expanduser("~/.openclaw")
+OC_USER      = "openclaw"
+OC_HOME      = f"/home/{OC_USER}"
+OPENCLAW_HOME = f"{OC_HOME}/.openclaw"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -193,12 +196,37 @@ def step_packages(ui: UI) -> None:
 
     if not missing:
         ui.success("All required packages already installed")
-        return
+    else:
+        ui.info(f"Installing: {', '.join(missing)} ...")
+        ui.run("apt-get update -qq", timeout=120, check=False)
+        ui.run(f"apt-get install -y -qq {' '.join(missing)}", timeout=120)
+        ui.success("Packages installed")
 
-    ui.info(f"Installing: {', '.join(missing)} ...")
-    ui.run("apt-get update -qq", timeout=120, check=False)
-    ui.run(f"apt-get install -y -qq {' '.join(missing)}", timeout=120)
-    ui.success("Packages installed")
+    # Node.js v22+ (OpenClaw runtime dependency)
+    r = ui.run("node --version 2>/dev/null | grep -qE '^v(2[2-9]|[3-9][0-9])'",
+               check=False)
+    if r.returncode == 0:
+        ui.success("Node.js v22+ already installed")
+    else:
+        ui.info("Installing Node.js v22 (OpenClaw runtime) ...")
+        ui.run("curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
+               timeout=120)
+        ui.run("apt-get install -y -qq nodejs", timeout=120)
+        ui.success("Node.js installed")
+
+    # Dedicated unprivileged user for running OpenClaw (no sudo, no shell)
+    r = ui.run(f"id {OC_USER} 2>/dev/null", check=False)
+    if r.returncode == 0:
+        ui.success(f"User '{OC_USER}' already exists")
+    else:
+        ui.info(f"Creating dedicated user '{OC_USER}' ...")
+        ui.run(
+            f"useradd --system --create-home --home-dir {OC_HOME} "
+            f"--shell /usr/sbin/nologin {OC_USER}"
+        )
+        ui.success(f"User '{OC_USER}' created (no sudo, no login shell)")
+    ui.run(f"loginctl enable-linger {OC_USER} 2>/dev/null || true",
+           check=False)
 
 
 # ── 2. WireGuard server ─────────────────────────────────────────────────
@@ -302,7 +330,109 @@ def step_wireguard(cfg: dict, ui: UI, skipped: list) -> bool:
 def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
     """Install OpenClaw, deploy PhantomPi skills, write env/config."""
 
-    # ── Install OpenClaw binary ──────────────────────────────────────
+    # ── Write config FIRST (prevents interactive onboarding wizard) ──
+    # OpenClaw's installer triggers an interactive setup wizard when it
+    # finds no existing config.  Writing .env and openclaw.json before
+    # installing means the wizard is skipped automatically.
+
+    # ── Write ~/.openclaw/.env ───────────────────────────────────────
+    os.makedirs(OPENCLAW_HOME, exist_ok=True)
+
+    api_key      = _get(cfg, "openclaw", "anthropic_api_key", default="")
+    bot_token    = _get(cfg, "openclaw", "discord_bot_token", default="")
+    implant_ips  = _get(cfg, "openclaw", "implant_ips", default=["10.8.0.3"])
+    implant_csv  = ",".join(implant_ips) if isinstance(implant_ips, list) else str(implant_ips)
+
+    if not api_key:
+        skipped.append(
+            "openclaw.anthropic_api_key is empty — OpenClaw cannot "
+            "run. Fill init.json and re-run setup."
+        )
+    if not bot_token:
+        skipped.append(
+            "openclaw.discord_bot_token is empty — Discord channel "
+            "will not connect. Fill init.json and re-run setup."
+        )
+
+    # Hooks token — auto-generate if not provided
+    hooks_token = _get(cfg, "openclaw", "hooks_token", default="")
+    if not hooks_token:
+        hooks_token = secrets.token_urlsafe(32)
+        ui.info("Auto-generated OpenClaw hooks token")
+
+    env_path = os.path.join(OPENCLAW_HOME, ".env")
+    ui.info("Writing ~/.openclaw/.env ...")
+    with open(env_path, "w") as fh:
+        fh.write(f"ANTHROPIC_API_KEY={api_key}\n")
+        fh.write(f"DISCORD_BOT_TOKEN={bot_token}\n")
+        fh.write(f"IMPLANT_IPS={implant_csv}\n")
+        fh.write(f"OPENCLAW_HOOKS_TOKEN={hooks_token}\n")
+    os.chmod(env_path, 0o600)
+    ui.success(".env written (permissions 600)")
+    alert_channel_id = _get(cfg, "openclaw", "discord_alert_channel_id", default="")
+    ui.info("Implant webhook config (copy to each implant's init.json or config.env):")
+    ui.info(f'  OPENCLAW_WEBHOOK_URL="http://{_get(cfg, "wireguard", "server_address", default="10.8.0.1/24").split("/")[0]}:18789/hooks/agent"')
+    ui.info(f'  OPENCLAW_WEBHOOK_TOKEN="{hooks_token}"')
+    ui.info(f'  OPENCLAW_ALERT_CHANNEL_ID="{alert_channel_id}"  (numeric Discord channel ID)')
+    if not alert_channel_id:
+        ui.warning("discord_alert_channel_id is empty in init.json — fill it with the numeric Discord channel ID")
+
+    # ── Write ~/.openclaw/openclaw.json ──────────────────────────────
+    guild_id   = _get(cfg, "openclaw", "discord_guild_id", default="")
+    admin_id   = _get(cfg, "openclaw", "discord_admin_user_id", default="")
+    extra_users = _get(cfg, "openclaw", "discord_allowed_users", default=[])
+    alert_ch   = _get(cfg, "openclaw", "discord_alert_channel", default="phantompi-alerts")
+    chat_ch    = _get(cfg, "openclaw", "discord_chat_channel", default="phantompi-chat")
+
+    # Build deduplicated user lists — admin always included
+    all_users = [str(admin_id)] if admin_id else []
+    for uid in extra_users:
+        uid = str(uid)
+        if uid and uid not in all_users:
+            all_users.append(uid)
+    allowed_users_str = ", ".join(f'"{u}"' for u in all_users)
+    # DMs: admin only
+    dm_users_str = f'"{admin_id}"' if admin_id else ""
+
+    if not guild_id:
+        skipped.append(
+            "openclaw.discord_guild_id is empty — guild access will "
+            "not work. Fill init.json and re-run setup."
+        )
+
+    # Derive WireGuard IP for gateway bind address
+    r = ui.run("ip -4 addr show wg0 2>/dev/null | grep -oP 'inet \\K[0-9.]+'",
+               check=False)
+    wg_ip = r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else ""
+    if not wg_ip:
+        # Fallback: parse from wg0.conf
+        srv_addr = _get(cfg, "wireguard", "server_address", default="10.8.0.1/24")
+        wg_ip = srv_addr.split("/")[0]
+    ui.info(f"Gateway will bind to WireGuard IP: {wg_ip}")
+
+    # Read template and substitute
+    template_path = os.path.join(REPO_DIR, "openclaw", "openclaw.json.template")
+    if os.path.isfile(template_path):
+        with open(template_path) as fh:
+            tmpl = fh.read()
+
+        config_str = tmpl.replace("__GUILD_ID__", str(guild_id))
+        config_str = config_str.replace("__ALLOWED_USERS__", allowed_users_str)
+        config_str = config_str.replace("__DM_USERS__", dm_users_str)
+        config_str = config_str.replace("__ALERT_CHANNEL_NAME__", alert_ch)
+        config_str = config_str.replace("__CHAT_CHANNEL_NAME__", chat_ch)
+        config_str = config_str.replace("__HOOKS_TOKEN__", hooks_token)
+        config_str = config_str.replace("__GATEWAY_HOST__", wg_ip)
+
+        config_path = os.path.join(OPENCLAW_HOME, "openclaw.json")
+        ui.info("Writing ~/.openclaw/openclaw.json ...")
+        with open(config_path, "w") as fh:
+            fh.write(config_str)
+        ui.success("OpenClaw config written")
+    else:
+        ui.warning("OpenClaw config template not found — create manually")
+
+    # ── Install OpenClaw binary (config already in place — no wizard) ─
     r = ui.run("command -v openclaw 2>/dev/null", check=False)
     if r.returncode != 0:
         ui.info("Installing OpenClaw ...")
@@ -327,73 +457,13 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
                 if os.path.isdir(d):
                     shutil.rmtree(d)
                 shutil.copytree(s, d)
-        # Make skill scripts executable
         for root, dirs, files in os.walk(SKILLS_DIR):
             for f in files:
                 if f.endswith(".sh"):
-                    path = os.path.join(root, f)
-                    os.chmod(path, 0o755)
+                    os.chmod(os.path.join(root, f), 0o755)
         ui.success("Skills deployed")
     else:
         ui.warning(f"Skills source not found at {skills_src}")
-
-    # ── Write ~/.openclaw/.env ───────────────────────────────────────
-    os.makedirs(OPENCLAW_HOME, exist_ok=True)
-
-    api_key   = _get(cfg, "openclaw", "anthropic_api_key", default="")
-    bot_token = _get(cfg, "openclaw", "discord_bot_token", default="")
-    implant   = _get(cfg, "openclaw", "implant_ip", default="10.8.0.3")
-
-    if not api_key:
-        skipped.append(
-            "openclaw.anthropic_api_key is empty — OpenClaw cannot "
-            "run. Fill init.json and re-run setup."
-        )
-    if not bot_token:
-        skipped.append(
-            "openclaw.discord_bot_token is empty — Discord channel "
-            "will not connect. Fill init.json and re-run setup."
-        )
-
-    env_path = os.path.join(OPENCLAW_HOME, ".env")
-    ui.info("Writing ~/.openclaw/.env ...")
-    with open(env_path, "w") as fh:
-        fh.write(f"ANTHROPIC_API_KEY={api_key}\n")
-        fh.write(f"DISCORD_BOT_TOKEN={bot_token}\n")
-        fh.write(f"IMPLANT_IP={implant}\n")
-    os.chmod(env_path, 0o600)
-    ui.success(".env written (permissions 600)")
-
-    # ── Write ~/.openclaw/openclaw.json ──────────────────────────────
-    guild_id   = _get(cfg, "openclaw", "discord_guild_id", default="")
-    admin_id   = _get(cfg, "openclaw", "discord_admin_user_id", default="")
-    alert_ch   = _get(cfg, "openclaw", "discord_alert_channel", default="phantompi-alerts")
-    chat_ch    = _get(cfg, "openclaw", "discord_chat_channel", default="phantompi-chat")
-
-    if not guild_id:
-        skipped.append(
-            "openclaw.discord_guild_id is empty — guild access will "
-            "not work. Fill init.json and re-run setup."
-        )
-
-    # Read template and substitute
-    template_path = os.path.join(REPO_DIR, "openclaw", "openclaw.json.template")
-    if os.path.isfile(template_path):
-        with open(template_path) as fh:
-            tmpl = fh.read()
-
-        config_str = tmpl.replace("__GUILD_ID__", str(guild_id))
-        config_str = config_str.replace("__ADMIN_USER_ID__", str(admin_id))
-        config_str = config_str.replace("__ALERT_CHANNEL_NAME__", alert_ch)
-        config_str = config_str.replace("__CHAT_CHANNEL_NAME__", chat_ch)
-
-        config_path = os.path.join(OPENCLAW_HOME, "openclaw.json")
-        ui.info("Writing ~/.openclaw/openclaw.json ...")
-        with open(config_path, "w") as fh:
-            fh.write(config_str)
-        ui.success("OpenClaw config written")
-    else:
-        ui.warning("OpenClaw config template not found — create manually")
 
     # ── Also deploy skills to ~/.openclaw/skills/ as fallback ────────
     user_skills = os.path.join(OPENCLAW_HOME, "skills")
@@ -412,11 +482,14 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
                     os.chmod(os.path.join(root, f), 0o755)
         ui.success("Skills also deployed to ~/.openclaw/skills/")
 
+    # ── Fix ownership — everything under OC_HOME must belong to OC_USER
+    ui.run(f"chown -R {OC_USER}:{OC_USER} {OC_HOME}", check=False)
 
-# ── 4. Configure OpenClaw daemon & cron ──────────────────────────────────
+
+# ── 4. Configure OpenClaw daemon ──────────────────────────────────────────
 
 def step_daemon(cfg: dict, ui: UI, skipped: list) -> None:
-    """Install OpenClaw daemon and set up the cred-sniffer cron job."""
+    """Stop legacy bot and start the OpenClaw daemon."""
 
     # ── Stop old Discord bot if running ──────────────────────────────
     r = ui.run("systemctl is-active discord-bot.service 2>/dev/null",
@@ -429,64 +502,63 @@ def step_daemon(cfg: dict, ui: UI, skipped: list) -> None:
         ui.run("systemctl daemon-reload", check=False)
         ui.success("Legacy Discord bot stopped and disabled")
 
-    # ── Install daemon ───────────────────────────────────────────────
-    r = ui.run("openclaw gateway status 2>/dev/null", check=False)
-    if r.returncode == 0:
-        ui.success("OpenClaw gateway already running")
-    else:
-        api_key = _get(cfg, "openclaw", "anthropic_api_key", default="")
-        if api_key:
-            ui.info("Starting OpenClaw gateway ...")
-            # Install the daemon (launchd on macOS, systemd on Linux)
-            ui.run("openclaw daemon install 2>/dev/null || true",
-                   check=False, timeout=30)
-            ui.run("openclaw daemon start 2>/dev/null || true",
-                   check=False, timeout=30)
-            ui.success("OpenClaw gateway started")
-        else:
-            skipped.append(
-                "OpenClaw gateway NOT started — API key missing. "
-                "After filling init.json and re-running setup, start with: "
-                "openclaw daemon start"
-            )
+    # ── Create system-level systemd service ─────────────────────────
+    # OpenClaw's built-in `daemon install` creates a user-level service
+    # that requires a D-Bus login session.  Our openclaw user is a
+    # system account with nologin shell — no session.  We write a
+    # proper system unit that runs the gateway as the openclaw user.
+    api_key = _get(cfg, "openclaw", "anthropic_api_key", default="")
+    if not api_key:
+        skipped.append(
+            "OpenClaw gateway NOT started — API key missing. "
+            "After filling init.json and re-run setup."
+        )
+        return
 
-    # ── Set up cred-sniffer cron job ─────────────────────────────────
-    implant_ip = _get(cfg, "openclaw", "implant_ip", default="10.8.0.3")
-    alert_ch   = _get(cfg, "openclaw", "discord_alert_channel",
-                       default="phantompi-alerts")
+    ui.info(f"Installing OpenClaw gateway as system service ({OC_USER}) ...")
 
-    # Check if cron job already exists
-    r = ui.run("openclaw cron list 2>/dev/null | grep -q cred-sniffer",
+    # Locate the openclaw binary
+    r = ui.run("command -v openclaw", check=False)
+    oc_bin = r.stdout.strip() if r.returncode == 0 else "/usr/bin/openclaw"
+
+    # Get WG IP for bind address (computed in step_openclaw)
+    r = ui.run("ip -4 addr show wg0 2>/dev/null | grep -oP 'inet \\K[0-9.]+'",
                check=False)
-    if r.returncode == 0:
-        ui.success("cred-sniffer cron job already exists")
-    else:
-        api_key = _get(cfg, "openclaw", "anthropic_api_key", default="")
-        if api_key:
-            ui.info("Creating cred-sniffer cron job (every 60s) ...")
-            ui.run(
-                f"openclaw cron add "
-                f"--name cred-sniffer "
-                f"--every 1m "
-                f"--session isolated "
-                f'--message "Run the cred-sniffer skill: use the '
-                f"check-findings.sh script to fetch credential findings "
-                f"from implant {implant_ip}. If there are new findings "
-                f'since the last check, summarise them." '
-                f"--tools exec,read "
-                f"--announce "
-                f"--channel discord",
-                check=False, timeout=30,
-            )
-            ui.success("cred-sniffer cron job created")
-        else:
-            skipped.append(
-                "cred-sniffer cron job NOT created — API key missing. "
-                "Create manually after setup with:\n"
-                "    openclaw cron add --name cred-sniffer --every 1m "
-                "--session isolated --message '...' --tools exec,read "
-                "--announce --channel discord"
-            )
+    gw_host = r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else ""
+    if not gw_host:
+        srv_addr = _get(cfg, "wireguard", "server_address", default="10.8.0.1/24")
+        gw_host = srv_addr.split("/")[0]
+
+    svc = (
+        "[Unit]\n"
+        "Description=OpenClaw Gateway\n"
+        "After=network-online.target wg-quick@wg0.service\n"
+        "Wants=network-online.target\n"
+        "Requires=wg-quick@wg0.service\n"
+        "\n"
+        "[Service]\n"
+        f"User={OC_USER}\n"
+        f"Group={OC_USER}\n"
+        f"WorkingDirectory={OC_HOME}\n"
+        f"Environment=HOME={OC_HOME}\n"
+        "Environment=NODE_ENV=production\n"
+        f"ExecStart={oc_bin} gateway --bind custom --port 18789\n"
+        "Restart=on-failure\n"
+        "RestartSec=5\n"
+        "\n"
+        "[Install]\n"
+        "WantedBy=multi-user.target\n"
+    )
+    with open("/etc/systemd/system/openclaw-gateway.service", "w") as fh:
+        fh.write(svc)
+
+    ui.run("systemctl daemon-reload")
+    ui.run("systemctl enable openclaw-gateway.service", check=False)
+    ui.run("systemctl restart openclaw-gateway.service", check=False)
+    ui.success("OpenClaw gateway started")
+
+    ui.info(f"Webhook endpoint available at http://{gw_host}:18789/hooks/agent")
+    ui.info("Implant scripts push events here — no cron polling needed")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -562,8 +634,8 @@ def main() -> None:
     _try(ui, "OpenClaw deployment",
          lambda: step_openclaw(cfg, ui, skipped), failures, args.debug)
 
-    # ── STEP 4 — Configure Daemon & Cron ─────────────────────────────
-    ui.step(4, TOTAL_STEPS, "Configure OpenClaw Daemon & Cron")
+    # ── STEP 4 — Configure Daemon ───────────────────────────────────
+    ui.step(4, TOTAL_STEPS, "Configure OpenClaw Daemon")
     _try(ui, "Daemon configuration",
          lambda: step_daemon(cfg, ui, skipped), failures, args.debug)
 
@@ -581,8 +653,7 @@ def main() -> None:
     else:
         ui.info("All done.  Verify with:")
         print("    wg show")
-        print("    openclaw gateway status")
-        print("    openclaw cron list")
+        print("    systemctl status openclaw-gateway.service")
         print()
 
 

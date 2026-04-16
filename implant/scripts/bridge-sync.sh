@@ -11,13 +11,29 @@ exec >> "$BRIDGE_SYNC_LOG" 2>&1
 
 # === Helper functions ===
 
-send_discord_notification() {
-    local message="$1"
-    if [ "$DISCORD_NOTIFY" = true ] && [ -n "$BRIDGE_SYNC_DISCORD_WEBHOOK_URL" ]; then
-        curl -s -X POST -H "Content-Type: application/json" \
-            -d "{\"content\": \"$message\"}" \
-            "$BRIDGE_SYNC_DISCORD_WEBHOOK_URL" > /dev/null
-    fi
+notify_openclaw() {
+    local event="$1" bridge="$2"
+
+    # Kill-switch for bridge notifications
+    [[ "${OPENCLAW_NOTIFY_BRIDGE:-yes}" != "yes" ]] && return 0
+
+    local url="${OPENCLAW_WEBHOOK_URL:-}"
+    local token="${OPENCLAW_WEBHOOK_TOKEN:-}"
+    local channel="${OPENCLAW_ALERT_CHANNEL_ID:-}"
+
+    # Skip if webhook is not configured
+    [ -z "$url" ] || [ -z "$token" ] && return 0
+
+    local ts
+    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    local msg="bridge-log: event=${event} implant=${IMPLANT_WG_IP} bridge=${bridge} time=${ts} type=routine-notification"
+
+    # Fire and forget — don't block bridge operations on notification
+    curl -sk -X POST "$url" \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        -d "{\"message\":\"${msg}\",\"name\":\"bridge-sync\",\"sessionKey\":\"hook:bridge-sync\",\"deliver\":true,\"channel\":\"discord\",\"to\":\"${channel}\"}" >/dev/null 2>&1 &
 }
 
 interface_exists() {
@@ -56,7 +72,7 @@ delete_bridge() {
         log "Deleting bridge $BRIDGE"
         ip link set "$BRIDGE" down
         ip link delete "$BRIDGE" type bridge
-        send_discord_notification "[${IMPLANT_WG_IP}] 🔴 Bridge \`$BRIDGE\` has been removed."
+        notify_openclaw "removed" "$BRIDGE"
     else
         log "No bridge $BRIDGE to delete."
     fi
@@ -91,8 +107,6 @@ delete_bridge() {
         sudo iptables -D OUTPUT -o "$VETH_OUT" -p tcp --tcp-flags RST RST -j DROP
     fi
 
-    log "Stopping bruteshark.service"
-    systemctl stop bruteshark.service || log "Failed to stop bruteshark.service"
 }
 
 create_bridge() {
@@ -108,9 +122,7 @@ create_bridge() {
     ip link set "$BRIDGE" up
     echo 8 | tee "/sys/class/net/$BRIDGE/bridge/group_fwd_mask" > /dev/null
 
-    log "Starting bruteshark.service"
-    systemctl start bruteshark.service || log "Failed to start bruteshark.service"
-    send_discord_notification "[${IMPLANT_WG_IP}] 🟢 Bridge \`$BRIDGE\` has been created."
+    notify_openclaw "created" "$BRIDGE"
 }
 
 # === Main logic ===
@@ -132,3 +144,6 @@ else
     log "One or both interfaces do not exist."
     delete_bridge
 fi
+
+# Wait for background webhook notifications to complete
+wait

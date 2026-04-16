@@ -55,12 +55,12 @@ else
 fi
 
 # ── 3. Remove OpenClaw data ─────────────────────────────────────────────
-info "Removing /opt/openclaw/ ..."
-if [ -d "/opt/openclaw" ]; then
-    rm -rf /opt/openclaw
-    success "Removed /opt/openclaw/"
+info "Removing /opt/implant/openclaw/ ..."
+if [ -d "/opt/implant/openclaw" ]; then
+    rm -rf /opt/implant/openclaw
+    success "Removed /opt/implant/openclaw/"
 else
-    success "/opt/openclaw does not exist"
+    success "/opt/implant/openclaw does not exist"
 fi
 
 if [ "$FULL" = true ]; then

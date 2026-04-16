@@ -16,14 +16,14 @@
             "guilds": {
                 "__GUILD_ID__": {
                     "requireMention": false,
-                    "users": ["__ADMIN_USER_ID__"],
+                    "users": [__ALLOWED_USERS__],
                     "channels": {
                         "__ALERT_CHANNEL_NAME__": {
-                            "allow": true,
+                            "enabled": true,
                             "requireMention": false
                         },
                         "__CHAT_CHANNEL_NAME__": {
-                            "allow": true,
+                            "enabled": true,
                             "requireMention": false
                         }
                     }
@@ -31,7 +31,7 @@
             },
             "dm": {
                 "enabled": true,
-                "allowFrom": ["__ADMIN_USER_ID__"]
+                "allowFrom": [__DM_USERS__]
             },
             "historyLimit": 30,
             "streaming": "off",
@@ -42,18 +42,30 @@
     "agents": {
         "defaults": {
             "model": "anthropic/claude-sonnet-4-6",
-            "skills": ["cred-sniffer", "implant-status"]
+            "skills": ["bridge-sync", "cred-sniffer", "implant-status"],
         }
-    },
-
-    "cron": {
-        "enabled": true,
-        "maxConcurrentRuns": 1
     },
 
     "skills": {
         "load": {
-            "extraDirs": ["/opt/openclaw/skills"]
+            "extraDirs": ["/opt/implant/openclaw/skills"]
         }
+    },
+
+    "hooks": {
+        "enabled": true,
+        "token": "__HOOKS_TOKEN__",
+        "path": "/hooks",
+        "allowedAgentIds": ["hooks", "main"],
+        "defaultSessionKey": "hook:ingress",
+        "allowRequestSessionKey": true,
+        "allowedSessionKeyPrefixes": ["hook:"]
+    },
+
+    "gateway": {
+        "mode": "local",
+        "bind": "custom",
+        "customBindHost": "__GATEWAY_HOST__",
+        "port": 18789
     }
 }

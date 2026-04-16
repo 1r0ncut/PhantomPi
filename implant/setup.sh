@@ -8,7 +8,6 @@
 # Usage:
 #   sudo bash setup.sh                    # default config
 #   sudo bash setup.sh --debug            # verbose output
-#   sudo bash setup.sh --skip-bruteshark  # skip .NET build
 #   sudo bash setup.sh -c my_config.json  # custom config
 #   sudo bash setup.sh --help             # show all options
 # =========================================================================

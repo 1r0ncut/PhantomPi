@@ -44,11 +44,13 @@
         "hidden": true
     },
 
-    "discord": {
-        "_comment": "Webhook URLs for Discord notifications. Leave empty to disable.",
-        "bridge_sync_webhook_url": "",
-        "bruteshark_webhook_url": "",
-        "notify": true
+    "openclaw": {
+        "_comment": "OpenClaw webhook for real-time alerts. Get webhook URL and token from VPS setup output. alert_channel_id must be the Discord channel ID (numeric), not the name. Set notify_bridge/notify_creds to 'no' to disable individually.",
+        "notify_bridge": "yes",
+        "notify_creds": "yes",
+        "webhook_url": "",
+        "webhook_token": "",
+        "alert_channel_id": ""
     },
 
     "sniffer": {

@@ -1,11 +1,11 @@
 [Unit]
-Description=Implant Flask HTTPS Server for Discord Bot
+Description=Implant Flask HTTPS API Server
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=/opt/implant/discord
-ExecStart=/opt/implant/discord/venv/bin/gunicorn \
+WorkingDirectory=/opt/implant/api
+ExecStart=/opt/implant/api/venv/bin/gunicorn \
     --certfile=certs/cert.pem \
     --keyfile=certs/key.pem \
     --bind 10.8.0.3:8443 \

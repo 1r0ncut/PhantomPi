@@ -25,9 +25,8 @@ from .ui import UI
 # Log sub-directories under /opt/implant/logs/
 _LOG_DIRS = [
     "bridge-sync",
-    "bruteshark",
     "hidden-hotspot",
-    "openclaw",
+    "cred-analyzer",
     "packet-sniffer",
     "power-monitor",
     "spoof-target",
@@ -43,12 +42,14 @@ _EXEC_SCRIPTS = [
     "power-monitor.sh",
     "spoof-target.sh",
     "wg-keepalive.sh",
+    "cred-analyzer.py",
 ]
 
 # Symlinks in /usr/local/bin/ for quick operator access
 _HELPER_LINKS = {
     "hidden-hotspot": "/opt/implant/scripts/hidden-hotspot.sh",
     "modem-config":   "/opt/implant/scripts/modem-config.sh",
+    "spoof-target":   "/opt/implant/scripts/spoof-target.sh",
 }
 
 
@@ -62,7 +63,7 @@ def deploy_files(repo_dir: str, ui: UI) -> None:
     ``/opt/implant/``.  Existing files are overwritten; files already on
     disk that are *not* in the repo (e.g. logs, certs) are preserved.
 
-    The repo layout has runtime directories (discord/, scripts/, services/,
+    The repo layout has runtime directories (api/, scripts/, services/,
     timers/, wittypi/, config.env) directly under ``implant/``.  The
     ``setup/`` directory and ``setup.sh`` are excluded — they are only
     needed on the operator's machine, not on the target device.
@@ -111,8 +112,8 @@ def create_log_dirs(ui: UI) -> None:
     ui.info("Creating log directories ...")
     for name in _LOG_DIRS:
         os.makedirs(f"/opt/implant/logs/{name}", exist_ok=True)
-    # Discord API server log
-    os.makedirs("/opt/implant/discord/logs", exist_ok=True)
+    # API server log
+    os.makedirs("/opt/implant/api/logs", exist_ok=True)
     ui.success("Log directories created")
 
 
@@ -163,7 +164,6 @@ def generate_config_env(config: dict, ui: UI) -> None:
     iface_tg    = get(config, "network", "iface_target", default="eth2")
 
     hidden_flag = "yes" if get(config, "hotspot", "hidden", default=True) else "no"
-    notify_flag = "true" if get(config, "discord", "notify", default=True) else "false"
 
     lines = [
         "# === PhantomPi Implant Configuration ===",
@@ -181,13 +181,6 @@ def generate_config_env(config: dict, ui: UI) -> None:
         "",
         "# --- Bridge Sync ---",
         'BRIDGE_SYNC_LOG="/opt/implant/logs/bridge-sync/bridge-sync.log"',
-        f'BRIDGE_SYNC_DISCORD_WEBHOOK_URL="{get(config, "discord", "bridge_sync_webhook_url", default="")}"',
-        f'DISCORD_NOTIFY={notify_flag}',
-        "",
-        "# --- BruteShark ---",
-        'BRUTESHARK_LOG="/opt/implant/logs/bruteshark/cli-output.log"',
-        'BRUTESHARK_CREDS="/opt/implant/logs/bruteshark/credentials.json"',
-        f'BRUTESHARK_DISCORD_WEBHOOK_URL="{get(config, "discord", "bruteshark_webhook_url", default="")}"',
         "",
         "# --- Hidden Hotspot ---",
         "# To apply changes run:  hidden-hotspot update",
@@ -206,8 +199,15 @@ def generate_config_env(config: dict, ui: UI) -> None:
         f'SNIFFER_MAX_FILE_SIZE_MB={get(config, "sniffer", "max_file_size_mb", default=200)}',
         f'SNIFFER_MAX_TOTAL_FILES={get(config, "sniffer", "max_total_files", default=5)}',
         "",
-        "# --- OpenClaw ---",
-        'OPENCLAW_LOG_DIR="/opt/implant/logs/openclaw"',
+        "# --- Credential Analyzer ---",
+        'CRED_ANALYZER_LOG_DIR="/opt/implant/logs/cred-analyzer"',
+        "",
+        "# --- OpenClaw Notifications ---",
+        f'OPENCLAW_NOTIFY_BRIDGE="{get(config, "openclaw", "notify_bridge", default="yes")}"',
+        f'OPENCLAW_NOTIFY_CREDS="{get(config, "openclaw", "notify_creds", default="yes")}"',
+        f'OPENCLAW_WEBHOOK_URL="{get(config, "openclaw", "webhook_url", default="")}"',
+        f'OPENCLAW_WEBHOOK_TOKEN="{get(config, "openclaw", "webhook_token", default="")}"',
+        f'OPENCLAW_ALERT_CHANNEL_ID="{get(config, "openclaw", "alert_channel_id", default="")}"',
         "",
         "# --- WireGuard Keepalive ---",
         f'WG_PING_ATTEMPTS={get(config, "keepalive", "ping_attempts", default=10)}',

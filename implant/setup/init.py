@@ -10,7 +10,6 @@ Usage
     sudo bash setup.sh                           # default config
     sudo bash setup.sh -c my_config.json         # custom config
     sudo bash setup.sh --debug                   # verbose output
-    sudo bash setup.sh --skip-bruteshark         # skip .NET build
 
 The script reads all deployment parameters from ``setup/init.json``
 (or a user-supplied path).  Fields left empty are skipped; a final
@@ -36,7 +35,7 @@ from modules.config  import load_config, validate_config         # noqa: E402
 from modules         import system, network, deploy, services    # noqa: E402
 
 # Total major steps displayed in the progress header
-TOTAL_STEPS = 9
+TOTAL_STEPS = 8
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +99,7 @@ def main() -> None:
             "  sudo bash setup.sh\n"
             "  sudo bash setup.sh -c /path/to/config.json\n"
             "  sudo bash setup.sh --debug\n"
-            "  sudo bash setup.sh --skip-bruteshark\n"
-        ),
+            ),
     )
     parser.add_argument(
         "-c", "--config",
@@ -112,11 +110,6 @@ def main() -> None:
         "-d", "--debug",
         action="store_true",
         help="enable verbose debug output for every command",
-    )
-    parser.add_argument(
-        "--skip-bruteshark",
-        action="store_true",
-        help="skip BruteShark installation (requires .NET 3.1 SDK, time-consuming)",
     )
     args = parser.parse_args()
 
@@ -209,31 +202,17 @@ def main() -> None:
     ) or False  # ensure bool even on failure
 
     # ==================================================================
-    #  STEP 6 — Discord API Server
+    #  STEP 6 — Flask HTTPS API Server
     # ==================================================================
-    ui.step(6, TOTAL_STEPS, "Discord API Server")
-    _try(ui, "Discord API setup",
-         lambda: services.setup_discord_api(config, ui, skipped),
+    ui.step(6, TOTAL_STEPS, "Flask HTTPS API Server")
+    _try(ui, "API server setup",
+         lambda: services.setup_api_server(config, ui, skipped),
          failures, args.debug)
 
     # ==================================================================
-    #  STEP 7 — BruteShark Credential Extractor
+    #  STEP 7 — Systemd Services & Log Rotation
     # ==================================================================
-    ui.step(7, TOTAL_STEPS, "BruteShark Credential Extractor")
-    bs_ok = _try(
-        ui, "BruteShark installation",
-        lambda: services.setup_bruteshark(ui, skip=args.skip_bruteshark),
-        failures, args.debug,
-    )
-    if bs_ok is False and not args.skip_bruteshark:
-        skipped.append(
-            "BruteShark build failed — install manually later (see wiki)"
-        )
-
-    # ==================================================================
-    #  STEP 8 — Systemd Services & Log Rotation
-    # ==================================================================
-    ui.step(8, TOTAL_STEPS, "Systemd Services & Log Rotation")
+    ui.step(7, TOTAL_STEPS, "Systemd Services & Log Rotation")
     _try(ui, "Systemd unit configuration",
          lambda: services.configure_systemd(ui, wg_configured=wg_configured),
          failures, args.debug)
@@ -241,9 +220,9 @@ def main() -> None:
          lambda: services.configure_logrotate(ui), failures, args.debug)
 
     # ==================================================================
-    #  STEP 9 — Finalize
+    #  STEP 8 — Finalize
     # ==================================================================
-    ui.step(9, TOTAL_STEPS, "Finalize")
+    ui.step(8, TOTAL_STEPS, "Finalize")
     _try(ui, "Hotspot creation",
          lambda: services.create_hotspot(config, ui, skipped),
          failures, args.debug)

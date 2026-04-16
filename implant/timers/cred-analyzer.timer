@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenClaw Credential Analyzer Timer
+Description=Credential Analyzer Timer
 
 [Timer]
 OnBootSec=2min

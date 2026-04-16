@@ -20,7 +20,9 @@
   <a href="#hardware">Hardware</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#installation">Installation</a> •
-  <a href="#3d-enclosure">3D Enclosure</a>
+  <a href="#3d-enclosure">3D Enclosure</a> •
+  <a href="docs/extending.md">Extending</a> •
+  <a href="#changelog">Changelog</a>
 </p>
 
 ---
@@ -207,7 +209,7 @@ flowchart TB
    sudo reboot
    ```
 
-> Use `sudo bash setup.sh --debug` for verbose output, or `--skip-bruteshark` to skip the .NET build.
+> Use `sudo bash setup.sh --debug` for verbose output.
 >
 > To undo everything and re-run from scratch:
 > ```bash
@@ -220,18 +222,24 @@ flowchart TB
 ```
 /opt/implant/
 ├── config.env              # Central configuration
+├── api/                    # Flask/Gunicorn HTTPS API (port 8443)
+│   ├── routes/             # Standalone route modules
+│   ├── certs/              # Self-signed TLS certificate
+│   └── venv/               # Python virtual environment
 ├── scripts/
 │   ├── bridge-sync.sh      # Bridge lifecycle (auto create/teardown)
+│   ├── cred-analyzer.py    # Scapy-based PCAP credential extractor
 │   ├── spoof-target.sh     # Identity detection & spoofing
 │   ├── wg-keepalive.sh     # VPN auto-reconnect
 │   ├── hidden-hotspot.sh   # Emergency WiFi AP
 │   ├── modem-config.sh     # LTE modem AT commands
-│   ├── trigger-lldp.py     # LLDP hostname extraction
-│   └── BruteShark/         # Credential extraction
-├── services/               # systemd units
-├── timers/                 # systemd timers
-├── wittypi/                # Witty Pi 4 power management + UWI
-└── discord/                # Implant-side API (Flask/Gunicorn)
+│   └── trigger-lldp.py     # LLDP hostname extraction
+├── logs/
+│   ├── packet-sniffer/     # Rolling PCAP captures
+│   └── cred-analyzer/      # findings.json + state.json
+├── services/               # systemd service units
+├── timers/                 # systemd timer units
+└── wittypi/                # Witty Pi 4 power management + UWI
 ```
 
 ### VPS (Operator Server)
@@ -249,7 +257,7 @@ flowchart TB
 3. Verify:
    ```bash
    wg show
-   systemctl status discord-bot
+   systemctl status openclaw
    ```
 
 > To undo everything and re-run from scratch:
@@ -261,14 +269,13 @@ flowchart TB
 #### Resulting Filesystem Layout
 
 ```
-/opt/implant/
-├── discord/                # Discord C2 bot (discord.py)
-│   ├── bot.py
-│   ├── commands/
-│   ├── config.py           
-│   ├── venv/               
-│   └── logs/
-└── services/               # systemd units
+/opt/implant/openclaw/
+├── openclaw.json           # OpenClaw configuration
+├── skills/
+│   ├── implant-status/     # Natural-language status queries
+│   ├── cred-sniffer/       # Credential analysis & reporting
+│   └── bridge-sync/        # Bridge event notifications
+└── logs/                   # OpenClaw runtime logs
 ```
 
 ## 3D Enclosure
@@ -279,3 +286,16 @@ STL files for the custom 3D-printed case:
 |------|-------------|
 | [`phantompi-implant-case.stl`](docs/3d-models/phantompi-implant-case.stl) | Main enclosure (body + cover) |
 | [`usb-to-eth-adapter-hat.stl`](docs/3d-models/usb-to-eth-adapter-hat.stl) | USB-to-Ethernet adapter mount |
+
+---
+
+## Changelog
+
+### [v1.1](https://github.com/1r0ncut/PhantomPi/releases/tag/v1.1) — AI-Powered Operator Interface
+
+Replaces the basic Discord slash-command bot with **[OpenClaw](https://openclaw.ai)** — a Claude-powered AI assistant that lets the operator interact with the implant in natural language directly from Discord.
+
+- **Natural-language C2** — query implant status, retrieve credentials, and investigate findings through conversation rather than fixed commands
+- **Real-time webhook push** — bridge events and newly extracted credentials are pushed to Discord the moment they occur, with no polling
+- **Credential analysis** — scapy-based PCAP analyzer extracts cleartext credentials, NTLM hashes, Kerberos tickets, and auth tokens; findings are persisted in a structured JSON store queryable by the AI
+- **Modular skill system** — operator-facing behaviours are defined as independent skills; the implant API follows the same modular pattern — see **[Extending PhantomPi](docs/extending.md)** for the full development workflow

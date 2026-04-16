@@ -104,17 +104,4 @@ def validate_config(config: dict) -> list[str]:
             "— hotspot profile will NOT be created"
         )
 
-    # -- Discord notifications (nice-to-have) ------------------------------
-    dc = config.get("discord", {})
-    if not dc.get("bridge_sync_webhook_url"):
-        warnings.append(
-            "discord.bridge_sync_webhook_url is empty "
-            "— bridge up/down notifications disabled"
-        )
-    if not dc.get("bruteshark_webhook_url"):
-        warnings.append(
-            "discord.bruteshark_webhook_url is empty "
-            "— credential-extraction notifications disabled"
-        )
-
     return warnings

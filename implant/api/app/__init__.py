@@ -9,18 +9,18 @@ def create_app():
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[
-            logging.FileHandler("/opt/implant/discord/logs/server.log"),
+            logging.FileHandler("/opt/implant/api/logs/server.log"),
             logging.StreamHandler()
         ]
     )
 
-    app.logger.info("Implant server starting up...")
+    app.logger.info("Implant API server starting up...")
 
-    # Dynamically register command routes
-    commands_path = os.path.join(os.path.dirname(__file__), "commands")
-    for fname in os.listdir(commands_path):
+    # Dynamically register route modules
+    routes_path = os.path.join(os.path.dirname(__file__), "routes")
+    for fname in os.listdir(routes_path):
         if fname.endswith(".py") and fname != "__init__.py":
-            mod = __import__(f"app.commands.{fname[:-3]}", fromlist=["register"])
+            mod = __import__(f"app.routes.{fname[:-3]}", fromlist=["register"])
             if hasattr(mod, "register"):
                 mod.register(app)
 
