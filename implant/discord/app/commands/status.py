@@ -25,7 +25,7 @@ def register(app):
         result['ports'] = run_cmd("ss -tuln | grep -i listen")
 
         # 5. Custom services (define which ones matter)
-        services = ["wg-keepalive.timer", "hidden-hotspot.service", "ntpsec-watchdog.timer", "bridge-sync.timer", "bruteshark.service", "packet-sniffer.service", "power-monitor.timer"]
+        services = ["wg-keepalive.timer", "hidden-hotspot.service", "ntpsec-watchdog.timer", "bridge-sync.timer", "bruteshark.service", "packet-sniffer.service", "power-monitor.timer", "openclaw-cred-analyzer.timer"]
         status_lines = []
         for s in services:
             state = run_cmd(f"systemctl is-active {s}")

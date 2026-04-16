@@ -74,6 +74,7 @@ UNITS=(
     wg-keepalive.timer  wg-keepalive.service
     bridge-sync.timer   bridge-sync.service
     power-monitor.timer power-monitor.service
+    openclaw-cred-analyzer.timer openclaw-cred-analyzer.service
     discord.service
     packet-sniffer.service
     hidden-hotspot.service
@@ -95,6 +96,7 @@ SYMLINKS=(
     bruteshark.service
     discord.service
     hidden-hotspot.service
+    openclaw-cred-analyzer.service openclaw-cred-analyzer.timer
     packet-sniffer.service
     power-monitor.service power-monitor.timer
     wg-keepalive.service  wg-keepalive.timer

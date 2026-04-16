@@ -1,6 +1,6 @@
 #!/bin/bash
 # =========================================================================
-# VPS WireGuard & Discord Bot — System Reset
+# VPS WireGuard & OpenClaw — System Reset
 # =========================================================================
 # Undoes everything init.py creates so the script can be re-run from
 # scratch without re-imaging the VPS.
@@ -8,9 +8,6 @@
 # Usage:
 #   sudo bash setup/reset.sh           # quick reset (keeps WG keys)
 #   sudo bash setup/reset.sh --full    # remove everything including keys
-#
-# What is NOT removed (safe to leave for re-runs):
-#   - APT packages (reinstalling them is slow and idempotent)
 # =========================================================================
 
 set -euo pipefail
@@ -26,7 +23,6 @@ info()    { echo -e "  ${CYAN}[*]${RESET} $1"; }
 success() { echo -e "  ${GREEN}[+]${RESET} $1"; }
 warn()    { echo -e "  ${YELLOW}[!]${RESET} $1"; }
 
-# ── Root check ────────────────────────────────────────────────────────────
 if [ "$(id -u)" -ne 0 ]; then
     echo -e "  ${RED}[-]${RESET} Run as root:  sudo bash setup/reset.sh"
     exit 1
@@ -35,38 +31,64 @@ fi
 FULL=false
 [ "${1:-}" = "--full" ] && FULL=true
 
-IMPLANT_DIR="/opt/implant"
-
 echo
 echo -e "${CYAN}${BOLD}========================================${RESET}"
-echo -e "${CYAN}${BOLD}  VPS WireGuard & Discord Bot — System Reset${RESET}"
+echo -e "${CYAN}${BOLD}  VPS WireGuard & OpenClaw — System Reset${RESET}"
 echo -e "${CYAN}${BOLD}========================================${RESET}"
 echo
 
-# ── 1. Stop & disable Discord bot service ─────────────────────────────────
-info "Stopping Discord bot service ..."
+# ── 1. Stop & remove legacy Discord bot (if any) ────────────────────────
+info "Stopping legacy Discord bot service (if any) ..."
 systemctl stop    discord-bot.service 2>/dev/null || true
 systemctl disable discord-bot.service 2>/dev/null || true
 rm -f /etc/systemd/system/discord-bot.service
-systemctl daemon-reload 2>/dev/null || true
-success "Discord bot service stopped and removed"
+success "Legacy Discord bot cleaned up"
 
-# ── 2. Remove /opt/implant/ ──────────────────────────────────────────────
-info "Removing $IMPLANT_DIR ..."
-if [ -d "$IMPLANT_DIR" ]; then
-    rm -rf "$IMPLANT_DIR"
-    success "Removed $IMPLANT_DIR"
+# ── 2. Stop OpenClaw ────────────────────────────────────────────────────
+info "Stopping OpenClaw ..."
+if command -v openclaw &>/dev/null; then
+    openclaw daemon stop 2>/dev/null || true
+    openclaw daemon uninstall 2>/dev/null || true
+    success "OpenClaw daemon stopped"
 else
-    success "$IMPLANT_DIR does not exist — nothing to remove"
+    success "OpenClaw not installed — nothing to stop"
 fi
 
-# ── 3. Stop & disable WireGuard ──────────────────────────────────────────
+# ── 3. Remove OpenClaw data ─────────────────────────────────────────────
+info "Removing /opt/openclaw/ ..."
+if [ -d "/opt/openclaw" ]; then
+    rm -rf /opt/openclaw
+    success "Removed /opt/openclaw/"
+else
+    success "/opt/openclaw does not exist"
+fi
+
+if [ "$FULL" = true ]; then
+    info "Removing ~/.openclaw/ (--full) ..."
+    rm -rf ~/.openclaw
+    success "Removed ~/.openclaw/"
+else
+    warn "~/.openclaw/ preserved (use --full to remove config & skills)"
+fi
+
+# ── 4. Remove legacy /opt/implant/ (old discord bot) ────────────────────
+info "Removing /opt/implant/ ..."
+if [ -d "/opt/implant" ]; then
+    rm -rf /opt/implant
+    success "Removed /opt/implant/"
+else
+    success "/opt/implant does not exist"
+fi
+
+systemctl daemon-reload 2>/dev/null || true
+
+# ── 5. Stop & disable WireGuard ─────────────────────────────────────────
 info "Stopping WireGuard ..."
 systemctl stop    wg-quick@wg0.service 2>/dev/null || true
 systemctl disable wg-quick@wg0.service 2>/dev/null || true
 success "WireGuard stopped and disabled"
 
-# ── 4. Remove WireGuard configuration ────────────────────────────────────
+# ── 6. Remove WireGuard configuration ───────────────────────────────────
 info "Removing WireGuard configuration ..."
 rm -f /etc/wireguard/wg0.conf
 
@@ -79,13 +101,13 @@ else
     success "WireGuard wg0.conf removed"
 fi
 
-# ── 5. Remove IP forwarding config ───────────────────────────────────────
+# ── 7. Remove IP forwarding config ──────────────────────────────────────
 info "Removing IP forwarding configuration ..."
 rm -f /etc/sysctl.d/99-wireguard.conf
 sysctl -w net.ipv4.ip_forward=0 2>/dev/null || true
 success "IP forwarding disabled"
 
-# ── Done ──────────────────────────────────────────────────────────────────
+# ── Done ────────────────────────────────────────────────────────────────
 echo
 echo -e "${CYAN}${BOLD}========================================${RESET}"
 echo -e "${GREEN}${BOLD}  Reset complete${RESET}"
@@ -98,6 +120,7 @@ echo
 if [ "$FULL" != true ]; then
     echo -e "  ${YELLOW}Preserved (use --full to remove):${RESET}"
     echo -e "    - WireGuard keys (/etc/wireguard/private.key, public.key)"
-    echo -e "    - APT packages (wireguard-tools, python3-venv)"
+    echo -e "    - OpenClaw config (~/.openclaw/)"
+    echo -e "    - APT packages"
     echo
 fi
