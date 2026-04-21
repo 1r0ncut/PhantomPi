@@ -297,5 +297,5 @@ Replaces the basic Discord slash-command bot with **[OpenClaw](https://openclaw.
 
 - **Natural-language C2**: query implant status, retrieve credentials, and investigate findings through conversation rather than fixed commands
 - **Real-time webhook push**: bridge events and newly extracted credentials are pushed to Discord the moment they occur, with no polling
-- **Credential analysis**: scapy-based PCAP analyzer extracts cleartext credentials, NTLM hashes, Kerberos tickets, and auth tokens; findings are persisted in a structured JSON store queryable by the AI
+- **Credential analysis**: Scapy-based PCAP analyzer extracts cleartext credentials, NetNTLM challenge-response hashes, Kerberos cracking material, and auth tokens from captured traffic; findings are deduplicated and persisted in a structured JSON store queryable by the AI
 - **Modular skill system**: operator-facing behaviours are defined as independent skills; the implant API follows the same modular pattern. See **[Implant API and OpenClaw Skills](docs/skills-and-api.md)** for the full development workflow
