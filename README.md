@@ -21,7 +21,6 @@
   <a href="#architecture">Architecture</a> •
   <a href="#installation">Installation</a> •
   <a href="#3d-enclosure">3D Enclosure</a> •
-  <a href="docs/skills-and-api.md">API and Skills</a> •
   <a href="#changelog">Changelog</a>
 </p>
 
