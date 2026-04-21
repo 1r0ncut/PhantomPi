@@ -8,7 +8,7 @@ metadata: {"openclaw":{"os":["linux"]}}
 
 # Bridge Sync Skill
 
-Bridge events are **routine operational notifications**. The implant's bridge-sync timer creates and removes the bridge automatically based on cable state. This is normal and expected — not an error, not an incident.
+Bridge events are **routine operational notifications**. The implant's bridge-sync timer creates and removes the bridge automatically based on cable state. This is normal and expected, not an error, not an incident.
 
 ## Webhook format
 

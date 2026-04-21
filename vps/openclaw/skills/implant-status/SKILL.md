@@ -37,7 +37,7 @@ Returns JSON with: `interfaces`, `routes`, `uptime`, `ports`, `services`.
 ### Services
 Each service shows a status emoji:
 - Green circle = active and healthy
-- Red circle = inactive or failed — flag to the operator
+- Red circle = inactive or failed. Flag to the operator.
 
 **Critical services to watch:**
 | Service | Purpose |
@@ -66,24 +66,24 @@ Each service shows a status emoji:
 ## Discord formatting
 
 Your output is rendered by **Discord**, not a markdown viewer.
-Only use formatting that Discord actually supports — if Discord would
+Only use formatting that Discord actually supports. If Discord would
 show it as raw text, do not use it.
 
 **Supported (use freely):**
 - `**bold**` for headings and labels
 - `*italic*` for emphasis
-- `\`inline code\`` for service names, IPs, paths, commands
-- ` \`\`\` ` fenced code blocks for JSON, multi-line data (use the language hint, e.g. ` \`\`\`json `)
+- `` `inline code` `` for service names, IPs, paths, commands
+- ` ``` ` fenced code blocks for JSON, multi-line data (use the language hint, e.g. ` ```json `)
 - `> ` blockquotes for quoting output or notes
 - `- ` or `• ` bullet lists
 - `1.` numbered lists
 
 **Not supported (never use):**
-- `---` horizontal rules — renders as literal text
-- Markdown tables (`| col |`) — renders as broken text
-- Headings (`#`, `##`) — Discord ignores them in bot messages
+- `---` horizontal rules (renders as literal text)
+- Markdown tables `| col |` (renders as broken text)
+- Headings `#`, `##` (Discord ignores them in bot messages)
 - HTML tags
 
 **General rules:**
-- Keep responses compact — no filler, no empty lines between every bullet.
+- Keep responses compact. No filler, no empty lines between every bullet.
 - Respond in the same language the operator uses.

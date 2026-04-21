@@ -1,10 +1,10 @@
-# Extending PhantomPi
+# Implant API and OpenClaw Skills
 
-This document covers how to add new operator-facing capabilities to PhantomPi — whether that means adding a new AI skill, extending the implant API, or both.
+How to add new capabilities to PhantomPi: new AI skills, new implant API endpoints, or both.
 
 ---
 
-## Architecture recap
+## Architecture
 
 ```
 Operator (Discord)
@@ -20,7 +20,7 @@ Operator (Discord)
   Implant internals       ← scripts, PCAPs, systemd services, logs
 ```
 
-When the operator asks something in Discord, OpenClaw selects the matching skill, runs its script(s), calls the implant API if needed, and formats the response. **The implant API is the only interface between VPS and implant** — skills never SSH into the implant or call scripts directly on it.
+When the operator asks something in Discord, OpenClaw selects the matching skill, runs its script(s), calls the implant API if needed, and formats the response.
 
 ---
 
@@ -30,18 +30,18 @@ When the operator asks something in Discord, OpenClaw selects the matching skill
 
 | Path | Purpose |
 |------|---------|
-| `~/.openclaw/openclaw.json` | OpenClaw runtime config (agents, hooks, channels) |
-| `/opt/implant/openclaw/skills/<name>/SKILL.md` | Skill definition — triggers, instructions, Discord formatting |
+| `/home/openclaw/.openclaw/openclaw.json` | OpenClaw runtime config (agents, hooks, channels) |
+| `/home/openclaw/.openclaw/.env` | Secrets (Discord token, API keys) |
+| `/opt/implant/openclaw/skills/<name>/SKILL.md` | Skill definition: triggers, instructions, Discord formatting |
 | `/opt/implant/openclaw/skills/<name>/scripts/` | Shell scripts the skill can invoke |
-| `/opt/implant/openclaw/.env` | Secrets (Discord token, API keys) |
 
 ### Implant side
 
 | Path | Purpose |
 |------|---------|
-| `/opt/implant/config.env` | Central config — sourced by all services |
+| `/opt/implant/config.env` | Central config, sourced by all services |
 | `/opt/implant/api/app/routes/` | One `.py` file per API endpoint |
-| `/opt/implant/scripts/` | Operator scripts + background analyzers |
+| `/opt/implant/scripts/` | Operator scripts and background analyzers |
 | `/opt/implant/logs/<service>/` | Per-service log directories |
 | `/opt/implant/services/` | systemd service unit files |
 | `/opt/implant/timers/` | systemd timer unit files |
@@ -117,7 +117,7 @@ echo "$RESPONSE"
 
 ### 4. Register the skill in OpenClaw config
 
-Add the skill name to the `skills` list in `openclaw.json`:
+Add the skill name to the `skills` list in `/home/openclaw/.openclaw/openclaw.json`:
 
 ```json
 "agents": {
@@ -147,19 +147,18 @@ Before writing a new skill, check whether the implant API already exposes the da
 | `GET /alive` | HTTP 200 (empty body) if reachable |
 | `GET /status` | Interface state, uptime, services, ports |
 | `GET /captured-creds` | All extracted credentials and hashes |
-| `POST /exec` | Run a whitelisted command and return output |
 
 If the data you need is not available, add a new route.
 
 ### Adding a new API route
 
-Each route lives in its own file under `implant/api/app/routes/`. The app auto-loads all `.py` files in that directory.
+Each route lives in its own file under `implant/api/app/routes/`. The app auto-loads all `.py` files in that directory at startup, so no registration is needed beyond creating the file.
 
 **1. Create `implant/api/app/routes/my_endpoint.py`:**
 
 ```python
 """
-My endpoint — short description of what it returns.
+My endpoint: short description of what it returns.
 """
 
 import json
@@ -224,4 +223,4 @@ When delivering to Discord, use this template:
 🔔 **Alert** | Implant `{implant}` | {summary}
 ```
 
-The `sessionKey` isolates this notification stream from other sessions — each notification type should use its own `hook:<name>` key. Allowed prefixes are configured in `openclaw.json` under `hooks.allowedSessionKeyPrefixes`.
+Each notification type should use its own `hook:<name>` session key to keep notification streams isolated. Allowed prefixes are configured in `/home/openclaw/.openclaw/openclaw.json` under `hooks.allowedSessionKeyPrefixes`.

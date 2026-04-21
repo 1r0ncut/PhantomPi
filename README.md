@@ -21,7 +21,7 @@
   <a href="#architecture">Architecture</a> •
   <a href="#installation">Installation</a> •
   <a href="#3d-enclosure">3D Enclosure</a> •
-  <a href="docs/extending.md">Extending</a> •
+  <a href="docs/skills-and-api.md">API and Skills</a> •
   <a href="#changelog">Changelog</a>
 </p>
 
@@ -39,9 +39,9 @@
 > [!NOTE]
 > **📖 Technical Deep Dive on Medium**
 > 
-> [**Part 1**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-1-8976a72c34d0) — Hardware assembly, LTE modem configuration, WireGuard VPN, Resilience measures, Discord C2 bot
+> [**Part 1**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-1-8976a72c34d0): Hardware assembly, LTE modem configuration, WireGuard VPN, Resilience measures, Discord C2 bot
 > 
-> [**Part 2**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-2-d74493d731ee) — Bridge mode, traffic interception, 802.1X/NAC bypass, identity spoofing, 3D-printed enclosure
+> [**Part 2**](https://posts.inthecyber.com/phantompi-a-covert-red-team-implant-part-2-d74493d731ee): Bridge mode, traffic interception, 802.1X/NAC bypass, identity spoofing, 3D-printed enclosure
 
 ### Gallery
 
@@ -291,11 +291,11 @@ STL files for the custom 3D-printed case:
 
 ## Changelog
 
-### [v1.1](https://github.com/1r0ncut/PhantomPi/releases/tag/v1.1) — AI-Powered Operator Interface
+### [v1.1](https://github.com/1r0ncut/PhantomPi/releases/tag/v1.1) &nbsp; OpenClaw: AI-Powered Operator Bot
 
-Replaces the basic Discord slash-command bot with **[OpenClaw](https://openclaw.ai)** — a Claude-powered AI assistant that lets the operator interact with the implant in natural language directly from Discord.
+Replaces the basic Discord slash-command bot with **[OpenClaw](https://openclaw.ai)**, a Claude-powered AI assistant that lets the operator interact with the implant in natural language directly from Discord.
 
-- **Natural-language C2** — query implant status, retrieve credentials, and investigate findings through conversation rather than fixed commands
-- **Real-time webhook push** — bridge events and newly extracted credentials are pushed to Discord the moment they occur, with no polling
-- **Credential analysis** — scapy-based PCAP analyzer extracts cleartext credentials, NTLM hashes, Kerberos tickets, and auth tokens; findings are persisted in a structured JSON store queryable by the AI
-- **Modular skill system** — operator-facing behaviours are defined as independent skills; the implant API follows the same modular pattern — see **[Extending PhantomPi](docs/extending.md)** for the full development workflow
+- **Natural-language C2**: query implant status, retrieve credentials, and investigate findings through conversation rather than fixed commands
+- **Real-time webhook push**: bridge events and newly extracted credentials are pushed to Discord the moment they occur, with no polling
+- **Credential analysis**: scapy-based PCAP analyzer extracts cleartext credentials, NTLM hashes, Kerberos tickets, and auth tokens; findings are persisted in a structured JSON store queryable by the AI
+- **Modular skill system**: operator-facing behaviours are defined as independent skills; the implant API follows the same modular pattern. See **[Implant API and OpenClaw Skills](docs/skills-and-api.md)** for the full development workflow
