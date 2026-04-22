@@ -447,9 +447,11 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
             # Run as the openclaw user so $HOME resolves to /home/openclaw.
             # The installer checks ~/.openclaw/ to skip the setup wizard —
             # it must find the config we already wrote there.
+            # Redirect stdin from /dev/null so any interactive prompt in the
+            # installer receives EOF immediately instead of blocking forever.
             ui.run(
                 f"su -s /bin/bash {OC_USER} -c "
-                f"'curl -fsSL https://openclaw.ai/install.sh | bash'",
+                f"'curl -fsSL https://openclaw.ai/install.sh | bash' < /dev/null",
                 timeout=600,
             )
             ui.success("OpenClaw installed")
