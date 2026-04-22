@@ -292,7 +292,7 @@ STL files for the custom 3D-printed case:
 
 ### [v1.1](https://github.com/1r0ncut/PhantomPi/releases/tag/v1.1) &nbsp; OpenClaw: AI-Powered Operator Bot
 
-Replaces the basic Discord slash-command bot with **[OpenClaw](https://openclaw.ai)**, a Claude-powered AI assistant that lets the operator interact with the implant in natural language directly from Discord.
+Replaces the basic Discord slash-command bot with **[OpenClaw](https://openclaw.ai)**, an AI-powered assistant that lets the operator interact with the implant in natural language directly from Discord.
 
 - **Natural-language C2**: query implant status, retrieve credentials, and investigate findings through conversation rather than fixed commands
 - **Real-time webhook push**: bridge events and newly extracted credentials are pushed to Discord the moment they occur, with no polling

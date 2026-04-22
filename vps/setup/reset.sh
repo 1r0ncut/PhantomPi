@@ -2,12 +2,12 @@
 # =========================================================================
 # VPS WireGuard & OpenClaw — System Reset
 # =========================================================================
-# Undoes everything init.py creates so the script can be re-run from
+# Undoes everything setup.sh creates so the script can be re-run from
 # scratch without re-imaging the VPS.
 #
 # Usage:
-#   sudo bash setup/reset.sh           # quick reset (keeps WG keys)
-#   sudo bash setup/reset.sh --full    # remove everything including keys
+#   sudo bash setup/reset.sh           # quick reset (keeps WG keys, OpenClaw binary, user)
+#   sudo bash setup/reset.sh --full    # full reset (removes everything including keys)
 # =========================================================================
 
 set -euo pipefail
@@ -44,43 +44,53 @@ systemctl disable discord-bot.service 2>/dev/null || true
 rm -f /etc/systemd/system/discord-bot.service
 success "Legacy Discord bot cleaned up"
 
-# ── 2. Stop OpenClaw ────────────────────────────────────────────────────
-info "Stopping OpenClaw ..."
-if command -v openclaw &>/dev/null; then
-    openclaw daemon stop 2>/dev/null || true
-    openclaw daemon uninstall 2>/dev/null || true
-    success "OpenClaw daemon stopped"
-else
-    success "OpenClaw not installed — nothing to stop"
-fi
-
-# ── 3. Remove OpenClaw data ─────────────────────────────────────────────
-info "Removing /opt/implant/openclaw/ ..."
-if [ -d "/opt/implant/openclaw" ]; then
-    rm -rf /opt/implant/openclaw
-    success "Removed /opt/implant/openclaw/"
-else
-    success "/opt/implant/openclaw does not exist"
-fi
-
-if [ "$FULL" = true ]; then
-    info "Removing ~/.openclaw/ (--full) ..."
-    rm -rf ~/.openclaw
-    success "Removed ~/.openclaw/"
-else
-    warn "~/.openclaw/ preserved (use --full to remove config & skills)"
-fi
-
-# ── 4. Remove legacy /opt/implant/ (old discord bot) ────────────────────
-info "Removing /opt/implant/ ..."
-if [ -d "/opt/implant" ]; then
-    rm -rf /opt/implant
-    success "Removed /opt/implant/"
-else
-    success "/opt/implant does not exist"
-fi
-
+# ── 2. Stop & remove OpenClaw gateway service ───────────────────────────
+info "Stopping OpenClaw gateway service ..."
+systemctl stop    openclaw-gateway.service 2>/dev/null || true
+systemctl disable openclaw-gateway.service 2>/dev/null || true
+rm -f /etc/systemd/system/openclaw-gateway.service
 systemctl daemon-reload 2>/dev/null || true
+success "OpenClaw gateway service removed"
+
+# ── 3. Remove OpenClaw skills and data ──────────────────────────────────
+info "Removing /opt/implant/openclaw/ ..."
+rm -rf /opt/implant/openclaw
+success "Removed /opt/implant/openclaw/"
+
+info "Removing /opt/implant/ (legacy) ..."
+rm -rf /opt/implant
+success "Removed /opt/implant/"
+
+# ── 4. Full: remove OpenClaw binary, config, and system user ────────────
+if [ "$FULL" = true ]; then
+    info "Removing OpenClaw binary (--full) ..."
+    # Try to locate and remove the binary
+    OC_BIN=$(command -v openclaw 2>/dev/null || true)
+    if [ -n "$OC_BIN" ]; then
+        rm -f "$OC_BIN"
+        success "Removed OpenClaw binary: $OC_BIN"
+    fi
+    # Also check common install paths
+    rm -f /usr/local/bin/openclaw /usr/bin/openclaw 2>/dev/null || true
+
+    info "Removing OpenClaw config and user (--full) ..."
+    # Disable linger before removing the user
+    loginctl disable-linger openclaw 2>/dev/null || true
+    # Remove user and home directory (/home/openclaw)
+    if id openclaw &>/dev/null; then
+        userdel -r openclaw 2>/dev/null || true
+        success "Removed openclaw system user and home directory"
+    else
+        # User already gone, clean up home dir if it remains
+        rm -rf /home/openclaw
+        success "openclaw user not found, cleaned up /home/openclaw if present"
+    fi
+else
+    info "Removing OpenClaw runtime config ..."
+    rm -rf /home/openclaw/.openclaw
+    success "Removed /home/openclaw/.openclaw/"
+    warn "OpenClaw binary and user preserved (use --full to remove completely)"
+fi
 
 # ── 5. Stop & disable WireGuard ─────────────────────────────────────────
 info "Stopping WireGuard ..."
@@ -95,7 +105,7 @@ rm -f /etc/wireguard/wg0.conf
 if [ "$FULL" = true ]; then
     rm -f /etc/wireguard/private.key
     rm -f /etc/wireguard/public.key
-    success "WireGuard config + keys removed (--full)"
+    success "WireGuard config and keys removed (--full)"
 else
     warn "WireGuard keys preserved at /etc/wireguard/ (use --full to remove)"
     success "WireGuard wg0.conf removed"
@@ -120,7 +130,7 @@ echo
 if [ "$FULL" != true ]; then
     echo -e "  ${YELLOW}Preserved (use --full to remove):${RESET}"
     echo -e "    - WireGuard keys (/etc/wireguard/private.key, public.key)"
-    echo -e "    - OpenClaw config (~/.openclaw/)"
+    echo -e "    - OpenClaw binary and system user"
     echo -e "    - APT packages"
     echo
 fi

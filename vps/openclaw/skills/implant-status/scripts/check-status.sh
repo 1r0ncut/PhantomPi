@@ -11,7 +11,11 @@
 set -euo pipefail
 
 ACTION="${1:-status}"
-IMPLANT_IP="${2:-${IMPLANT_IPS:-10.8.0.3}}"
+IMPLANT_IP="${2:-${IMPLANT_IPS:-}}"
+if [ -z "$IMPLANT_IP" ]; then
+    echo '{"error":"No implant IP provided. Set implant_ips in OpenClaw config."}'
+    exit 1
+fi
 PORT="${3:-8443}"
 BASE="https://${IMPLANT_IP}:${PORT}"
 

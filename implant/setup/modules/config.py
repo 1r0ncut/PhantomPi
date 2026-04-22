@@ -48,7 +48,7 @@ def get_implant_ip(config: dict) -> str:
     Return the bare IPv4 address from ``wireguard.implant_address``
     (strips the CIDR suffix, e.g. ``10.8.0.3/24`` -> ``10.8.0.3``).
     """
-    addr = get(config, "wireguard", "implant_address", default="10.8.0.3/24")
+    addr = get(config, "wireguard", "implant_address", default="")
     return addr.split("/")[0]
 
 

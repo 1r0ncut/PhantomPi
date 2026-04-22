@@ -81,7 +81,7 @@ Brief explanation of what this skill is for.
 Describe when and how the agent should invoke the script.
 
 \`\`\`bash
-bash {baseDir}/scripts/my-script.sh ${IMPLANT_IP:-10.8.0.3}
+bash {baseDir}/scripts/my-script.sh [IMPLANT_IP]
 \`\`\`
 
 ## Interpreting the output
@@ -102,8 +102,13 @@ The script calls the implant API and returns structured output (JSON preferred):
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMPLANT_IP="${1:-${IMPLANT_IPS:-10.8.0.3}}"
+IMPLANT_IP="${1:-${IMPLANT_IPS:-}}"
 PORT="${2:-8443}"
+
+if [ -z "$IMPLANT_IP" ]; then
+    echo '{"error":"No implant IP provided. Set implant_ips in OpenClaw config."}'
+    exit 1
+fi
 
 RESPONSE=$(curl -sk --max-time 10 "https://${IMPLANT_IP}:${PORT}/my-endpoint" 2>/dev/null || echo "")
 

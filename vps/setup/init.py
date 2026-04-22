@@ -340,7 +340,7 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
 
     api_key      = _get(cfg, "openclaw", "anthropic_api_key", default="")
     bot_token    = _get(cfg, "openclaw", "discord_bot_token", default="")
-    implant_ips  = _get(cfg, "openclaw", "implant_ips", default=["10.8.0.3"])
+    implant_ips  = _get(cfg, "openclaw", "implant_ips", default=[])
     implant_csv  = ",".join(implant_ips) if isinstance(implant_ips, list) else str(implant_ips)
 
     if not api_key:

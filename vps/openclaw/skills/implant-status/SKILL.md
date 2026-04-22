@@ -15,7 +15,7 @@ You report the operational status of PhantomPi implants for the operator.
 ## Checking if an implant is alive
 
 ```bash
-bash {baseDir}/scripts/check-status.sh alive ${IMPLANT_IP:-10.8.0.3}
+bash {baseDir}/scripts/check-status.sh alive [IMPLANT_IP]
 ```
 
 The script sends a request to the implant's `/alive` endpoint.
@@ -27,7 +27,7 @@ The script wraps the result as JSON: `{"implant":"...","status":"alive"|"dead","
 ## Getting full system status
 
 ```bash
-bash {baseDir}/scripts/check-status.sh status ${IMPLANT_IP:-10.8.0.3}
+bash {baseDir}/scripts/check-status.sh status [IMPLANT_IP]
 ```
 
 Returns JSON with: `interfaces`, `routes`, `uptime`, `ports`, `services`.
