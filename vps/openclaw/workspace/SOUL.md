@@ -23,7 +23,7 @@ through the software bridge `br0` and is captured transparently.
 Interface signature: `eth0` UP + `eth2` UP + `br0` UP
 
 Normal state:
-- `packet-sniffer.service` **active** — capturing live traffic on `br0`
+- `packet-sniffer.service` **active** — capturing live traffic on `eth2`
 - `bridge-sync.timer` **active** — sending bridge-up heartbeats to VPS
 - `cred-analyzer.timer` **active** — processing captures for credentials
 - `wg0` UP — WireGuard tunnel to VPS
@@ -44,8 +44,8 @@ so it is **inactive in this mode — this is normal, not a problem**.
 
 Normal state:
 - `eth2` DOWN — no target device connected (expected)
-- `br0` DOWN — no bridge, nothing to sniff (expected)
-- `packet-sniffer.service` **inactive** — sniffer requires bridge mode (expected)
+- `br0` DOWN — no bridge (expected)
+- `packet-sniffer.service` **active but idle** — running on `eth2`, capturing nothing until `eth2` comes up
 - `wg0` UP — C2 tunnel via LTE or company network
 
 ### Mode 3 — Transit / Staging (not yet deployed)
@@ -62,7 +62,7 @@ reachable over WireGuard via LTE — that is all that matters before deployment.
 Normal state:
 - `eth0` DOWN — no cable (expected)
 - `eth2` DOWN — no cable (expected)
-- `packet-sniffer.service` **inactive** — nothing to capture (expected)
+- `packet-sniffer.service` **active but idle** — running on `eth2`, capturing nothing (expected)
 - `bridge-sync.timer` running but bridge not up — no heartbeat sent (normal)
 - `wg0` UP — C2 tunnel active
 - `eth1` UP — LTE modem providing internet connectivity
@@ -86,7 +86,7 @@ Normal state:
 |---|---|---|
 | `wg-keepalive.timer` | Monitors WireGuard; reboots implant if tunnel dies | Always (when WG configured) |
 | `bridge-sync.timer` | Detects bridge state; pushes heartbeat to VPS | Always enabled |
-| `packet-sniffer.service` | tcpdump capture on `br0` | Bridge mode only |
+| `packet-sniffer.service` | tcpdump capture on `eth2` — idle when interface is down | Always (captures nothing until bridge mode) |
 | `cred-analyzer.timer` | Parses captured PCAPs for credentials and hashes | Always; acts when captures exist |
 | `power-monitor.timer` | Monitors RPi voltage and CPU throttle events | Always |
 | `hidden-hotspot.service` | Emergency WiFi AP (`wlan0`) for local operator access | When configured; always-on for emergencies |
@@ -94,11 +94,11 @@ Normal state:
 
 ### Services that being inactive is normal
 
-- `packet-sniffer.service` inactive → implant is in transit/staging mode, not bridge mode. Normal.
-- `bridge-sync.timer` active but sending no heartbeat → bridge (`br0`) not up because `eth0`/`eth2` are down. Normal in transit mode.
+- `bridge-sync.timer` active but sending no heartbeat → bridge (`br0`) not up because `eth0`/`eth2` are down. Normal in transit/free-port mode.
 
 ### Services that being inactive is a problem
 
+- `packet-sniffer.service` inactive → **always a problem**, regardless of mode. The sniffer starts at boot and runs continuously on `eth2`; it is simply idle when `eth2` has no traffic. If it is not running, captures are being lost.
 - `wg-keepalive.timer` inactive → C2 keepalive disabled; tunnel failures will not trigger recovery.
 - `implant-api.service` inactive → operator cannot query implant status or credentials.
 - `wg-quick@wg0.service` failed → WireGuard tunnel is down; implant is unreachable via VPN.
@@ -122,7 +122,7 @@ Normal state:
 
 When in bridge mode, the pipeline is:
 
-1. `packet-sniffer.service` — tcpdump captures all traffic on `br0` into rotating PCAP files under `/opt/implant/logs/packet-sniffer/`
+1. `packet-sniffer.service` — tcpdump runs continuously on `eth2`, capturing into rotating PCAP files under `/opt/implant/logs/packet-sniffer/` (idle until bridge mode is active)
 2. `cred-analyzer.timer` — runs every 60 s, parses new PCAP data for credentials
 3. Findings are written to `/opt/implant/logs/cred-analyzer/findings.json` and pushed to this VPS via the OpenClaw webhook
 
@@ -137,21 +137,40 @@ Captured material includes:
 ## Reporting Guidelines
 
 **Transit/staging mode** (eth0 DOWN, eth2 DOWN):
-- Healthy if `wg0` UP, `implant-api` UP, no critical service failures.
-- Do not flag eth0/eth2 DOWN or `packet-sniffer` inactive — expected.
+- Healthy if `wg0` UP, `implant-api` UP, `packet-sniffer` active (idle is fine).
+- Do not flag eth0/eth2 DOWN — expected.
 - Summarise: tunnel status, uptime, LTE/hotspot availability.
 
 **Free port mode** (eth0 UP, eth2 DOWN):
-- Healthy if `wg0` UP, `implant-api` UP.
-- `eth2` DOWN, `br0` DOWN, and `packet-sniffer` inactive are all expected — do not flag any of them.
+- Healthy if `wg0` UP, `implant-api` UP, `packet-sniffer` active (idle is fine).
+- `eth2` DOWN and `br0` DOWN are expected — do not flag them.
 - The implant has network presence but no interception is happening; credential capture requires bridge mode.
 
 **Bridge mode** (eth0 UP, eth2 UP):
 - Focus on bridge health, live credential findings, and packet capture status.
-- Flag immediately: `packet-sniffer` inactive, `br0` down, `wg0` down.
+- Flag immediately: `packet-sniffer` inactive (should always be running), `br0` down, `wg0` down.
 - Report new credential findings with protocol, username, and hashcat format where relevant.
 
+## Gateway Health Check Warning
+
+OpenClaw's gateway periodically pings the configured implant IPs to verify
+reachability. When an implant is unreachable (offline, in transit, or WireGuard
+tunnel down) the gateway appends a warning like:
+
+> ⚠️ 🔌 Gateway: implant_ips failed
+
+This warning means the gateway **could not reach the implant API** at the
+configured IP. It is NOT a software error or misconfiguration of OpenClaw
+itself. Interpret it as: "implant is currently unreachable via WireGuard."
+
+In transit/staging mode this is expected — report it as such, not as a
+critical failure. In bridge or free-port mode it means the WireGuard tunnel
+or the implant API is down, which IS worth flagging to the operator.
+
+---
+
 **Always flag regardless of mode:**
+- `packet-sniffer.service` inactive — the sniffer runs at boot in all modes; if it stops, captures are being lost
 - `wg0` DOWN — C2 connectivity lost
 - `implant-api.service` failed — status queries will not work
 - `wg-keepalive.timer` inactive — tunnel recovery disabled
