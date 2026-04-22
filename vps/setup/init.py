@@ -433,38 +433,21 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
         ui.warning("OpenClaw config template not found — create manually")
 
     # ── Install OpenClaw binary (config already in place — no wizard) ─
-    # Check as the openclaw user — the binary lands in their ~/.local/bin/
-    # which is not in root's PATH, so a plain `command -v` as root misses it.
-    r = ui.run(
-        "su -s /bin/bash openclaw -c 'command -v openclaw' 2>/dev/null "
-        "|| find /home/openclaw /usr/local/bin /usr/bin "
-        "   -maxdepth 4 -name openclaw -type f 2>/dev/null | head -1",
-        check=False,
-    )
+    r = ui.run("command -v openclaw 2>/dev/null", check=False)
     if not r.stdout.strip():
         ui.info("Installing OpenClaw ...")
         try:
-            # Run as the openclaw user so $HOME resolves to /home/openclaw.
-            # OPENCLAW_NO_PROMPT and OPENCLAW_NO_ONBOARD suppress all
-            # interactive prompts in the installer. stdin is also closed
-            # (/dev/null) as a belt-and-suspenders measure.
-            ui.run(
-                f"su -s /bin/bash {OC_USER} -c "
-                f"'OPENCLAW_NO_PROMPT=1 OPENCLAW_NO_ONBOARD=1 "
-                f"OPENCLAW_INSTALL_METHOD=npm "
-                f"curl -fsSL https://openclaw.ai/install.sh | bash' < /dev/null",
-                timeout=600,
-            )
+            # Use npm directly — fully non-interactive, no installer wizard.
+            # Node.js is already installed system-wide by step 1 so npm is
+            # available. The binary lands in the global npm prefix
+            # (/usr/local/bin/openclaw) which is in the search paths used
+            # by both the binary locator below and the systemd service.
+            ui.run("npm install -g openclaw", timeout=300)
             ui.success("OpenClaw installed")
         except RuntimeError:
             # Installer can take several minutes on a fresh VPS.
             # If it timed out but the binary landed, treat it as success.
-            r2 = ui.run(
-                "su -s /bin/bash openclaw -c 'command -v openclaw' 2>/dev/null "
-                "|| find /home/openclaw /usr/local/bin /usr/bin "
-                "   -maxdepth 4 -name openclaw -type f 2>/dev/null | head -1",
-                check=False,
-            )
+            r2 = ui.run("command -v openclaw 2>/dev/null", check=False)
             if r2.stdout.strip():
                 ui.warning(
                     "OpenClaw installer exceeded timeout but binary is present — continuing"
@@ -547,14 +530,9 @@ def step_daemon(cfg: dict, ui: UI, skipped: list) -> None:
 
     ui.info(f"Installing OpenClaw gateway as system service ({OC_USER}) ...")
 
-    # Locate the openclaw binary (may live in the openclaw user's ~/.local/bin)
-    r = ui.run(
-        "su -s /bin/bash openclaw -c 'command -v openclaw' 2>/dev/null "
-        "|| find /home/openclaw /usr/local/bin /usr/bin "
-        "   -maxdepth 4 -name openclaw -type f 2>/dev/null | head -1",
-        check=False,
-    )
-    oc_bin = r.stdout.strip() or "/home/openclaw/.local/bin/openclaw"
+    # Locate the openclaw binary (npm global install → /usr/local/bin/openclaw)
+    r = ui.run("command -v openclaw 2>/dev/null", check=False)
+    oc_bin = r.stdout.strip() or "/usr/local/bin/openclaw"
 
     # Get WG IP for bind address (computed in step_openclaw)
     r = ui.run("ip -4 addr show wg0 2>/dev/null | grep -oP 'inet \\K[0-9.]+'",

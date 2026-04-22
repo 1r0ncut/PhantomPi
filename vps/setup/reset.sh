@@ -64,14 +64,10 @@ success "Removed /opt/implant/"
 # ── 4. Full: remove OpenClaw binary, config, and system user ────────────
 if [ "$FULL" = true ]; then
     info "Removing OpenClaw binary (--full) ..."
-    # Try to locate and remove the binary
-    OC_BIN=$(command -v openclaw 2>/dev/null || true)
-    if [ -n "$OC_BIN" ]; then
-        rm -f "$OC_BIN"
-        success "Removed OpenClaw binary: $OC_BIN"
-    fi
-    # Also check common install paths
+    npm uninstall -g openclaw 2>/dev/null || true
+    # Belt-and-suspenders: remove binary directly if npm missed it
     rm -f /usr/local/bin/openclaw /usr/bin/openclaw 2>/dev/null || true
+    success "OpenClaw package removed"
 
     info "Removing OpenClaw config and user (--full) ..."
     # Disable linger before removing the user
