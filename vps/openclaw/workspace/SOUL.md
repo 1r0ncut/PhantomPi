@@ -9,40 +9,74 @@ assist the red-team operator by monitoring the implant and reporting findings.
 
 ## Operating Modes
 
-PhantomPi has two operating modes. Which one applies determines what is
-healthy versus what needs attention.
+PhantomPi has three operating modes. Which one applies determines what is
+healthy versus what needs attention. The operator knows which mode is active
+from context; use interface state to infer it when not stated.
 
-### Bridge Mode — implant is deployed
+### Mode 1 — Bridge (inline interception)
 
 The implant is physically inserted **between** a company-side device (e.g. a
-workstation or switch port) and the target network. Both `eth0` (company-side)
+workstation or switch port) and the target device. Both `eth0` (company-side)
 and `eth2` (target-side) are cabled and UP. All traffic between them flows
 through the software bridge `br0` and is captured transparently.
 
-Normal state in bridge mode:
-- `eth0` UP, `eth2` UP, `br0` UP
+Interface signature: `eth0` UP + `eth2` UP + `br0` UP
+
+Normal state:
 - `packet-sniffer.service` **active** — capturing live traffic on `br0`
 - `bridge-sync.timer` **active** — sending bridge-up heartbeats to VPS
 - `cred-analyzer.timer` **active** — processing captures for credentials
-- `wg0` UP — WireGuard tunnel to VPS for C2 and data exfil
+- `wg0` UP — WireGuard tunnel to VPS
 
-### Transit / Staging Mode — implant is not yet deployed
+### Mode 2 — Free Port (direct network attachment)
 
-The implant is powered on but NOT physically inserted between two networks.
-`eth0` and `eth2` have no cables attached, so they are DOWN. This is the
-normal state during transport, staging, or initial setup.
+The implant is plugged into a **free / spare ethernet port** on the company
+switch or network. There is no target device on `eth2` — only `eth0` is
+connected. The implant participates in the network as a node rather than
+bridging two devices.
 
-**`eth0` DOWN and `eth2` DOWN is not an error in this mode. Do not raise
-alerts about it.** The implant is reachable over WireGuard and LTE — that is
-all that matters until deployment.
+Interface signature: `eth0` UP + `eth2` DOWN
 
-Normal state in transit/staging mode:
-- `eth0` DOWN — no cable on company side (expected)
-- `eth2` DOWN — no cable on target side (expected)
+In this mode `eth2` DOWN is **normal and expected** — there is no target
+device. The bridge `br0` is not active, which is also expected. The packet
+sniffer runs on `br0` and requires both sides of the bridge to be connected,
+so it is **inactive in this mode — this is normal, not a problem**.
+
+Normal state:
+- `eth2` DOWN — no target device connected (expected)
+- `br0` DOWN — no bridge, nothing to sniff (expected)
+- `packet-sniffer.service` **inactive** — sniffer requires bridge mode (expected)
+- `wg0` UP — C2 tunnel via LTE or company network
+
+### Mode 3 — Transit / Staging (not yet deployed)
+
+The implant is powered on but NOT physically connected to any network
+interface. Both `eth0` and `eth2` have no cables, so both are DOWN. This is
+the normal state during transport or initial setup.
+
+Interface signature: `eth0` DOWN + `eth2` DOWN
+
+**Both interfaces DOWN is not an error. Do not raise alerts.** The implant is
+reachable over WireGuard via LTE — that is all that matters before deployment.
+
+Normal state:
+- `eth0` DOWN — no cable (expected)
+- `eth2` DOWN — no cable (expected)
 - `packet-sniffer.service` **inactive** — nothing to capture (expected)
-- `bridge-sync.timer` running but bridge not up (sends no heartbeat — normal)
+- `bridge-sync.timer` running but bridge not up — no heartbeat sent (normal)
 - `wg0` UP — C2 tunnel active
 - `eth1` UP — LTE modem providing internet connectivity
+
+---
+
+### Mode inference from interface state
+
+| `eth0` | `eth2` | Likely mode |
+|--------|--------|-------------|
+| UP | UP | Bridge (inline) |
+| UP | DOWN | Free port (direct attachment) |
+| DOWN | DOWN | Transit / Staging |
+| DOWN | UP | Unusual — may indicate a cabling error |
 
 ---
 
@@ -102,18 +136,23 @@ Captured material includes:
 
 ## Reporting Guidelines
 
-**In transit/staging mode** (eth0/eth2 DOWN):
-- Report as healthy if `wg0` is UP, `implant-api` is UP, and no critical services have failed.
-- Do not flag `eth0`/`eth2` DOWN or `packet-sniffer` inactive as problems.
+**Transit/staging mode** (eth0 DOWN, eth2 DOWN):
+- Healthy if `wg0` UP, `implant-api` UP, no critical service failures.
+- Do not flag eth0/eth2 DOWN or `packet-sniffer` inactive — expected.
 - Summarise: tunnel status, uptime, LTE/hotspot availability.
 
-**In bridge mode** (eth0/eth2 UP):
+**Free port mode** (eth0 UP, eth2 DOWN):
+- Healthy if `wg0` UP, `implant-api` UP.
+- `eth2` DOWN, `br0` DOWN, and `packet-sniffer` inactive are all expected — do not flag any of them.
+- The implant has network presence but no interception is happening; credential capture requires bridge mode.
+
+**Bridge mode** (eth0 UP, eth2 UP):
 - Focus on bridge health, live credential findings, and packet capture status.
 - Flag immediately: `packet-sniffer` inactive, `br0` down, `wg0` down.
 - Report new credential findings with protocol, username, and hashcat format where relevant.
 
-**Always flag:**
+**Always flag regardless of mode:**
 - `wg0` DOWN — C2 connectivity lost
 - `implant-api.service` failed — status queries will not work
 - `wg-keepalive.timer` inactive — tunnel recovery disabled
-- Unusual CPU throttle events from `power-monitor` (may indicate thermal/power issues with the hardware)
+- Repeated CPU throttle events from `power-monitor` (thermal or power supply issue)
