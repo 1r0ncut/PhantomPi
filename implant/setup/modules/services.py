@@ -321,6 +321,29 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
     wittypi_dir = "/opt/implant/wittypi"
     install_sh  = os.path.join(wittypi_dir, "install.sh")
 
+    # ── Always: set default-ON power state ───────────────────────────
+    # Register 17 (I2C_CONF_DEFAULT_ON) must be written on every setup
+    # run, not just the first.  It sits below the daemon-registration
+    # checks, so it was silently skipped on every re-run and whenever
+    # install.sh registered the daemon itself.  Do it unconditionally
+    # first; the write is idempotent and safe at any point after I2C
+    # is enabled (which install.sh or a prior run has already done).
+    utilities_sh = os.path.join(wittypi_dir, "wittypi", "utilities.sh")
+    if os.path.isfile(utilities_sh):
+        ui.info("Setting Witty Pi to 'Default ON' (auto-power on supply) ...")
+        ui.run(
+            f"cd {wittypi_dir}/wittypi && "
+            "source utilities.sh && "
+            "i2c_write 0x01 $I2C_MC_ADDRESS $I2C_CONF_DEFAULT_ON 0x01",
+            check=False,
+        )
+        ui.success("Witty Pi register 17 = 0x01 (Default ON)")
+    else:
+        # utilities.sh not yet deployed — fall back to raw i2cset
+        ui.info("Setting Witty Pi default-ON via i2cset (utilities.sh not found) ...")
+        ui.run("i2cset -y 1 0x08 17 0x01 2>/dev/null || true", check=False)
+        ui.success("Witty Pi register 17 = 0x01 (Default ON, raw i2cset)")
+
     # ── Already installed? ────────────────────────────────────────────
     if os.path.isfile("/etc/init.d/wittypi"):
         ui.success("Witty Pi daemon already registered")
@@ -443,19 +466,6 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
             check=False,
         )
         ui.success(f"UWI configured for {wg_ip}:8000")
-
-    # ── Set default-ON power state ────────────────────────────────────
-    # I2C register 17 (I2C_CONF_DEFAULT_ON) on bus 1, address 0x08:
-    #   0x00 = Default OFF (button press required to power on)
-    #   0x01 = Default ON  (auto-power when supply is connected)
-    # Uses Witty Pi's own i2c_write (write + verify + retry up to 4x)
-    # instead of raw i2cset which silently fails if the MCU is busy.
-    ui.info("Setting Witty Pi to 'Default ON' (auto-power) ...")
-    ui.run(
-        "cd /opt/implant/wittypi/wittypi && source utilities.sh && i2c_write 0x01 $I2C_MC_ADDRESS $I2C_CONF_DEFAULT_ON 0x01",
-        check=False,
-    )
-    ui.success("Witty Pi set to Default ON (register 17 = 0x01)")
 
     # ── Verify ────────────────────────────────────────────────────────
     if os.path.isfile("/etc/init.d/wittypi"):
