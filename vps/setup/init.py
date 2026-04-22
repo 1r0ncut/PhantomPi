@@ -509,6 +509,20 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
                     os.chmod(os.path.join(root, f), 0o755)
         ui.success("Skills also deployed to ~/.openclaw/skills/")
 
+    # ── Deploy workspace context files (SOUL.md etc.) ────────────────
+    workspace_src = os.path.join(REPO_DIR, "openclaw", "workspace")
+    workspace_dst = os.path.join(OPENCLAW_HOME, "workspace")
+    os.makedirs(workspace_dst, exist_ok=True)
+    if os.path.isdir(workspace_src):
+        for f in os.listdir(workspace_src):
+            src_f = os.path.join(workspace_src, f)
+            dst_f = os.path.join(workspace_dst, f)
+            if os.path.isfile(src_f):
+                shutil.copy2(src_f, dst_f)
+        ui.success("Workspace context files deployed (SOUL.md)")
+    else:
+        ui.warning("Workspace source not found — SOUL.md not deployed")
+
     # ── Fix ownership — everything under OC_HOME must belong to OC_USER
     ui.run(f"chown -R {OC_USER}:{OC_USER} {OC_HOME}", check=False)
 
