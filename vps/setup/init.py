@@ -457,6 +457,20 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
     else:
         ui.success("OpenClaw already installed")
 
+    # ── Fix npm package ownership ─────────────────────────────────────
+    # `npm install -g` runs as root → installs to a root-owned directory.
+    # OpenClaw installs plugin dependencies (discord, acpx, browser) the
+    # first time it starts, which requires write access to that directory.
+    # Give the openclaw service user ownership so those writes succeed.
+    r_npm = ui.run("npm root -g 2>/dev/null", check=False)
+    npm_root = r_npm.stdout.strip() if r_npm.returncode == 0 else ""
+    if npm_root:
+        oc_pkg = os.path.join(npm_root, "openclaw")
+        if os.path.isdir(oc_pkg):
+            ui.info(f"Setting ownership of {oc_pkg} to {OC_USER} ...")
+            ui.run(f"chown -R {OC_USER}:{OC_USER} {oc_pkg}", check=False)
+            ui.success(f"Plugin directory ownership fixed")
+
     # ── Deploy skills to /opt/openclaw/skills/ ───────────────────────
     skills_src = os.path.join(REPO_DIR, "openclaw", "skills")
     os.makedirs(SKILLS_DIR, exist_ok=True)
