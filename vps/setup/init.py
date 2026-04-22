@@ -436,11 +436,22 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
     r = ui.run("command -v openclaw 2>/dev/null", check=False)
     if r.returncode != 0:
         ui.info("Installing OpenClaw ...")
-        ui.run(
-            "curl -fsSL https://openclaw.ai/install.sh | bash",
-            timeout=180,
-        )
-        ui.success("OpenClaw installed")
+        try:
+            ui.run(
+                "curl -fsSL https://openclaw.ai/install.sh | bash",
+                timeout=600,
+            )
+            ui.success("OpenClaw installed")
+        except RuntimeError:
+            # Installer can take several minutes on a fresh VPS.
+            # If it timed out but the binary landed, treat it as success.
+            r2 = ui.run("command -v openclaw 2>/dev/null", check=False)
+            if r2.returncode == 0:
+                ui.warning(
+                    "OpenClaw installer exceeded timeout but binary is present — continuing"
+                )
+            else:
+                raise
     else:
         ui.success("OpenClaw already installed")
 
