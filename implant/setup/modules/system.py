@@ -35,8 +35,8 @@ APT_PACKAGES = [
     "logrotate",
     # Network management
     "network-manager",
-    # BruteShark build dependencies
-    "libicu-dev", "icu-devtools", "git",
+    # Build tools & libraries
+    "git",
     # Witty Pi 4 (I2C communication with MCU)
     "i2c-tools",
 ]
@@ -80,7 +80,7 @@ def install_packages(ui: UI) -> None:
         )
         ui.success("System packages installed")
 
-    # Python libs needed by bruteshark.py wrapper (python-dotenv, requests)
+    # Python helper libraries (python-dotenv for config.env, requests for HTTP)
     result = ui.run(
         "python3 -c 'import dotenv; import requests' 2>/dev/null",
         check=False,

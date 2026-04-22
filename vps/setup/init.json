@@ -1,10 +1,18 @@
 {
-    "_readme": "VPS WireGuard & Discord Bot — Configuration. Fill values below, then run: sudo bash setup.sh",
+    "_readme": "VPS WireGuard & OpenClaw — Configuration. Fill values below, then run: sudo bash setup.sh",
 
-    "discord": {
-        "_comment": "Bot credentials from https://discord.com/developers/applications",
-        "bot_token": "",
-        "guild_id": ""
+    "openclaw": {
+        "_comment": "OpenClaw AI assistant. Bot token from https://discord.com/developers/applications. API key from https://console.anthropic.com/",
+        "anthropic_api_key": "",
+        "discord_bot_token": "",
+        "discord_guild_id": "",
+        "discord_admin_user_id": "",
+        "discord_allowed_users": [],
+        "discord_alert_channel": "phantompi-alerts",
+        "discord_alert_channel_id": "",
+        "discord_chat_channel": "phantompi-chat",
+        "hooks_token": "",
+        "implant_ips": ["10.8.0.3"]
     },
 
     "wireguard": {

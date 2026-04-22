@@ -1,8 +1,7 @@
 """
 PhantomPi Setup — Service & Tool Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-* Discord Flask API server  (venv, TLS certs, corrected systemd unit)
-* BruteShark credential extractor  (.NET 3.1, clone, compile)
+* Flask HTTPS API server  (venv, TLS certs, corrected systemd unit)
 * systemd unit symlinks + timer/service enablement
 * Logrotate rules for every implant log
 * Hidden-hotspot NetworkManager profile creation
@@ -22,22 +21,24 @@ from .ui import UI
 # ---------------------------------------------------------------------------
 _SYSTEMD_UNITS: dict[str, str] = {
     # services
-    "bridge-sync.service":       "/opt/implant/services/bridge-sync.service",
-    "bruteshark.service":        "/opt/implant/services/bruteshark.service",
-    "discord.service":           "/opt/implant/services/discord.service",
-    "hidden-hotspot.service":    "/opt/implant/services/hidden-hotspot.service",
-    "packet-sniffer.service":    "/opt/implant/services/packet-sniffer.service",
-    "power-monitor.service":     "/opt/implant/services/power-monitor.service",
-    "wg-keepalive.service":      "/opt/implant/services/wg-keepalive.service",
+    "bridge-sync.service":              "/opt/implant/services/bridge-sync.service",
+    "implant-api.service":              "/opt/implant/services/implant-api.service",
+    "hidden-hotspot.service":           "/opt/implant/services/hidden-hotspot.service",
+    "cred-analyzer.service":            "/opt/implant/services/cred-analyzer.service",
+    "packet-sniffer.service":           "/opt/implant/services/packet-sniffer.service",
+    "power-monitor.service":            "/opt/implant/services/power-monitor.service",
+    "wg-keepalive.service":             "/opt/implant/services/wg-keepalive.service",
     # timers
-    "bridge-sync.timer":         "/opt/implant/timers/bridge-sync.timer",
-    "power-monitor.timer":       "/opt/implant/timers/power-monitor.timer",
-    "wg-keepalive.timer":        "/opt/implant/timers/wg-keepalive.timer",
+    "bridge-sync.timer":                "/opt/implant/timers/bridge-sync.timer",
+    "cred-analyzer.timer":              "/opt/implant/timers/cred-analyzer.timer",
+    "power-monitor.timer":              "/opt/implant/timers/power-monitor.timer",
+    "wg-keepalive.timer":               "/opt/implant/timers/wg-keepalive.timer",
 }
 
 # Timers to ALWAYS enable at boot (safe regardless of config)
 _ENABLE_TIMERS_ALWAYS = [
     "bridge-sync.timer",
+    "cred-analyzer.timer",
     "power-monitor.timer",
 ]
 
@@ -48,13 +49,14 @@ _WG_KEEPALIVE_TIMER = "wg-keepalive.timer"
 
 # Services to ALWAYS enable at boot
 _ENABLE_SERVICES = [
-    "discord.service",
+    "implant-api.service",
     "packet-sniffer.service",
 ]
 
 # Logrotate entries  (name -> log path)
 _LOGROTATE: dict[str, str] = {
     "bridge-sync":   "/opt/implant/logs/bridge-sync/bridge-sync.log",
+    "cred-analyzer":  "/opt/implant/logs/cred-analyzer/cred-analyzer.log",
     "wg-keepalive":  "/opt/implant/logs/wg-keepalive/wg-keepalive.log",
     "power-monitor": "/opt/implant/logs/power-monitor/power-monitor.log",
 }
@@ -74,29 +76,29 @@ _LOGROTATE_TEMPLATE = """\
 
 
 # ---------------------------------------------------------------------------
-# Discord Flask API server
+# Flask HTTPS API server
 # ---------------------------------------------------------------------------
 
-def setup_discord_api(config: dict, ui: UI, skipped: list) -> None:
+def setup_api_server(config: dict, ui: UI, skipped: list) -> None:
     """
-    Prepare the implant-side Flask HTTPS server used by the Discord bot:
-    * Create a Python virtual-env and install requirements
+    Prepare the implant-side Flask HTTPS API server:
+    * Create a Python virtual-env and install requirements (incl. scapy)
     * Generate a self-signed TLS certificate (10-year validity)
-    * Re-write discord.service so it reads ``IMPLANT_WG_IP`` from
+    * Re-write implant-api.service so it reads ``IMPLANT_WG_IP`` from
       ``config.env`` via ``EnvironmentFile=``
     """
-    discord_dir = "/opt/implant/discord"
-    venv_dir    = os.path.join(discord_dir, "venv")
-    certs_dir   = os.path.join(discord_dir, "certs")
+    api_dir   = "/opt/implant/api"
+    venv_dir  = os.path.join(api_dir, "venv")
+    certs_dir = os.path.join(api_dir, "certs")
 
     # ── virtual-env ───────────────────────────────────────────────────────
     if not os.path.isdir(venv_dir):
-        ui.info("Creating Discord API virtual environment ...")
+        ui.info("Creating API server virtual environment ...")
         ui.run(f"python3 -m venv {venv_dir}", timeout=60)
         ui.run(f"{venv_dir}/bin/pip install --upgrade pip -q", timeout=60)
         ui.run(
-            f"{venv_dir}/bin/pip install -r {discord_dir}/requirements.txt -q",
-            timeout=60,
+            f"{venv_dir}/bin/pip install -r {api_dir}/requirements.txt -q",
+            timeout=120,
         )
         ui.success("Virtual environment created")
     else:
@@ -120,18 +122,18 @@ def setup_discord_api(config: dict, ui: UI, skipped: list) -> None:
     else:
         ui.success("TLS certificate already exists")
 
-    # ── Rewrite discord.service with EnvironmentFile ──────────────────────
-    ui.info("Updating discord.service with dynamic WireGuard IP binding ...")
+    # ── Rewrite implant-api.service with EnvironmentFile ──────────────────────
+    ui.info("Updating implant-api.service with dynamic WireGuard IP binding ...")
     svc = (
         "[Unit]\n"
-        "Description=Implant Flask HTTPS Server for Discord Bot\n"
+        "Description=Implant Flask HTTPS API Server\n"
         "After=network-online.target wg-quick@wg0.service\n"
         "Wants=network-online.target wg-quick@wg0.service\n"
         "\n"
         "[Service]\n"
-        "WorkingDirectory=/opt/implant/discord\n"
+        "WorkingDirectory=/opt/implant/api\n"
         "EnvironmentFile=/opt/implant/config.env\n"
-        "ExecStart=/opt/implant/discord/venv/bin/gunicorn \\\n"
+        "ExecStart=/opt/implant/api/venv/bin/gunicorn \\\n"
         "    --certfile=certs/cert.pem \\\n"
         "    --keyfile=certs/key.pem \\\n"
         "    --bind ${IMPLANT_WG_IP}:8443 \\\n"
@@ -143,133 +145,9 @@ def setup_discord_api(config: dict, ui: UI, skipped: list) -> None:
         "[Install]\n"
         "WantedBy=multi-user.target\n"
     )
-    with open("/opt/implant/services/discord.service", "w") as fh:
+    with open("/opt/implant/services/implant-api.service", "w") as fh:
         fh.write(svc)
-    ui.success("discord.service updated")
-
-
-# ---------------------------------------------------------------------------
-# BruteShark credential extractor
-# ---------------------------------------------------------------------------
-
-def setup_bruteshark(ui: UI, *, skip: bool = False) -> bool:
-    """
-    Install the .NET Core 3.1 SDK, clone BruteShark, and compile
-    ``BruteSharkCli``.  Returns True on success.
-
-    The build is entirely optional — pass ``skip=True`` (via
-    ``--skip-bruteshark``) to bypass it.
-    """
-    if skip:
-        ui.skipped("BruteShark installation skipped (--skip-bruteshark)")
-        return False
-
-    bs_bin = "/usr/local/bin/BruteSharkCli"
-    if os.path.isfile(bs_bin):
-        ui.success("BruteShark already installed")
-        return True
-
-    try:
-        # ── .NET Core 3.1 SDK ─────────────────────────────────────────────
-        dotnet_check = ui.run(
-            "DOTNET_ROOT=/root/.dotnet PATH=$PATH:/root/.dotnet "
-            "dotnet --list-sdks 2>/dev/null | grep -q '^3\\.'",
-            check=False,
-        )
-        if dotnet_check.returncode == 0:
-            ui.success(".NET Core 3.1 SDK already installed")
-        else:
-            ui.info("Installing .NET Core 3.1 SDK (may take several minutes) ...")
-            ui.run(
-                "curl -sSL https://dot.net/v1/dotnet-install.sh "
-                "| bash /dev/stdin --channel 3.1",
-                timeout=300,
-            )
-
-            # Fix native-lib symlink required by the runtime
-            ui.run(
-                "ln -sf /lib/aarch64-linux-gnu/libdl.so.2 "
-                "/lib/aarch64-linux-gnu/libdl.so 2>/dev/null || true",
-                check=False,
-            )
-
-        # libssl1.1 compatibility package (needed by .NET 3.1 on newer Kali)
-        # Checked on EVERY run — the SDK install may have succeeded on a
-        # previous run while libssl was missing or later removed.
-        libssl_check = ui.run(
-            "ldconfig -p 2>/dev/null | grep -q 'libssl.so.1.1'",
-            check=False,
-        )
-        if libssl_check.returncode == 0:
-            ui.success("libssl1.1 already available")
-        else:
-            # The exact filename changes with security updates, so we
-            # scrape the Debian pool directory for the latest arm64 deb.
-            ui.info("Installing libssl1.1 compatibility ...")
-            ui.run(
-                "cd /tmp && "
-                "POOL='http://security.debian.org/debian-security/pool/"
-                "updates/main/o/openssl' && "
-                "DEB=$(curl -sL \"$POOL/\" "
-                "| grep -oP 'libssl1\\.1_[^\"]+_arm64\\.deb' "
-                "| sort -V | tail -1) && "
-                "[ -n \"$DEB\" ] && "
-                "wget -q \"$POOL/$DEB\" && "
-                "dpkg -i \"$DEB\"",
-                timeout=120, check=False,
-            )
-
-        # Persist environment for future shells
-        _ensure_dotnet_env()
-
-        # Shell snippet to set env for the current build commands
-        dotnet_env = (
-            "export DOTNET_ROOT=/root/.dotnet && "
-            "export PATH=$PATH:/root/.dotnet && "
-            "export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1"
-        )
-
-        # ── Clone & compile ───────────────────────────────────────────────
-        bs_src = "/opt/implant/scripts/BruteShark/src"
-        if not os.path.isdir(bs_src):
-            ui.info("Cloning BruteShark repository ...")
-            ui.run(
-                f"git clone --depth 1 "
-                f"https://github.com/odedshimon/BruteShark.git {bs_src}",
-                timeout=120,
-            )
-
-        cli_proj = os.path.join(bs_src, "BruteShark", "BruteSharkCli")
-        cli_bin  = os.path.join(
-            cli_proj, "bin", "Release", "netcoreapp3.1", "BruteSharkCli"
-        )
-
-        # ── Compile (skip if binary already built) ────────────────────────
-        if os.path.isfile(cli_bin):
-            ui.success("BruteSharkCli already compiled")
-        else:
-            ui.info("Compiling BruteSharkCli (may take several minutes) ...")
-            ui.run(
-                f"{dotnet_env} && cd {cli_proj} && "
-                f"dotnet build --configuration Release",
-                timeout=600,
-            )
-
-        # ── Symlink the binary ────────────────────────────────────────────
-        if os.path.isfile(cli_bin):
-            if os.path.islink(bs_bin):
-                os.unlink(bs_bin)
-            os.symlink(cli_bin, bs_bin)
-            ui.success("BruteShark linked to /usr/local/bin/")
-            return True
-
-        ui.warning("BruteSharkCli binary not found after compilation")
-        return False
-
-    except Exception as exc:
-        ui.warning(f"BruteShark installation failed: {exc}")
-        ui.warning("Install manually later — see the project wiki for steps")
-        return False
+    ui.success("implant-api.service updated")
 
 
 # ---------------------------------------------------------------------------
@@ -278,8 +156,13 @@ def setup_bruteshark(ui: UI, *, skip: bool = False) -> bool:
 
 def configure_systemd(ui: UI, *, wg_configured: bool = False) -> None:
     """
-    Create symlinks in ``/etc/systemd/system/`` for every implant
-    service and timer, then enable the ones that should start at boot.
+    Register and enable implant systemd units.
+
+    * Service units driven by timers are registered with ``systemctl link``
+      (makes them known to systemd without enabling them at boot).
+    * Timers and standalone services are enabled with
+      ``systemctl enable /full/path`` so systemd handles symlink placement
+      based on each unit's ``[Install]`` section.
 
     Parameters
     ----------
@@ -289,18 +172,14 @@ def configure_systemd(ui: UI, *, wg_configured: bool = False) -> None:
         is left *disabled* to avoid a reboot loop (the keepalive script
         reboots the device when it cannot reach the VPN server).
     """
-    ui.info("Creating systemd unit symlinks ...")
+    ui.info("Registering systemd units ...")
 
     for unit_name, source in _SYSTEMD_UNITS.items():
-        link = f"/etc/systemd/system/{unit_name}"
-        # Remove stale link (or regular file) before (re)creating
-        if os.path.islink(link) or os.path.exists(link):
-            os.remove(link)
-        if os.path.isfile(source):
-            os.symlink(source, link)
-            ui.debug(f"  {unit_name} -> {source}")
-        else:
-            ui.debug(f"  {unit_name}: source not found ({source})")
+        if not os.path.isfile(source):
+            ui.debug(f"  {unit_name}: source not found ({source}), skipping")
+            continue
+        ui.run(f"systemctl link {source} 2>/dev/null || true", check=False)
+        ui.debug(f"  linked {source}")
 
     # ── Cap NM-wait-online timeout ──────────────────────────────────
     # The default 60 s timeout delays wg-quick@wg0 (which depends on
@@ -319,19 +198,24 @@ def configure_systemd(ui: UI, *, wg_configured: bool = False) -> None:
         ui.success("NM-wait-online timeout capped at 30 s")
 
     ui.run("systemctl daemon-reload")
-    ui.success("Systemd units linked and daemon reloaded")
+    ui.success("Systemd units registered and daemon reloaded")
 
-    # Enable timers — always-safe ones first
+    # Enable timers — always-safe ones first (full path so systemd places
+    # the symlink based on the unit's own [Install] section)
     ui.info("Enabling boot-time timers and services ...")
     for timer in _ENABLE_TIMERS_ALWAYS:
-        ui.run(f"systemctl enable {timer} 2>/dev/null || true", check=False)
+        source = _SYSTEMD_UNITS.get(timer)
+        if source and os.path.isfile(source):
+            ui.run(f"systemctl enable {source} 2>/dev/null || true", check=False)
 
     # wg-keepalive only when the VPN is ready (prevents reboot loop)
+    wg_timer_source = _SYSTEMD_UNITS.get(_WG_KEEPALIVE_TIMER, "")
     if wg_configured:
-        ui.run(
-            f"systemctl enable {_WG_KEEPALIVE_TIMER} 2>/dev/null || true",
-            check=False,
-        )
+        if wg_timer_source and os.path.isfile(wg_timer_source):
+            ui.run(
+                f"systemctl enable {wg_timer_source} 2>/dev/null || true",
+                check=False,
+            )
         ui.success("wg-keepalive.timer enabled (WireGuard is configured)")
     else:
         ui.run(
@@ -344,7 +228,9 @@ def configure_systemd(ui: UI, *, wg_configured: bool = False) -> None:
         )
 
     for svc in _ENABLE_SERVICES:
-        ui.run(f"systemctl enable {svc} 2>/dev/null || true", check=False)
+        source = _SYSTEMD_UNITS.get(svc)
+        if source and os.path.isfile(source):
+            ui.run(f"systemctl enable {source} 2>/dev/null || true", check=False)
     ui.success("Timers and services enabled")
 
 
@@ -434,6 +320,40 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
     """
     wittypi_dir = "/opt/implant/wittypi"
     install_sh  = os.path.join(wittypi_dir, "install.sh")
+
+    # ── Always: set default-ON power state ───────────────────────────
+    # Register 17 (I2C_CONF_DEFAULT_ON) must be written on every setup
+    # run — it was previously skipped due to early returns in the daemon
+    # registration flow.
+    #
+    # ui.run() uses subprocess shell=True which invokes /bin/sh (dash on
+    # Kali/Debian).  dash does not support the 'source' builtin, so all
+    # commands that source utilities.sh must be wrapped in bash -c '...'.
+    # reset.sh avoids this because it declares #!/bin/bash at the top.
+    #
+    # On a truly fresh image the I2C kernel module may not be loaded yet.
+    # We load it live (no reboot needed for the module) before the write.
+    ui.run(
+        "modprobe i2c-bcm2835 2>/dev/null || modprobe i2c-bcm2708 2>/dev/null || true",
+        check=False,
+    )
+    ui.run("modprobe i2c-dev 2>/dev/null || true", check=False)
+
+    utilities_sh = os.path.join(wittypi_dir, "wittypi", "utilities.sh")
+    if os.path.isfile(utilities_sh):
+        ui.info("Setting Witty Pi to 'Default ON' (auto-power on supply) ...")
+        ui.run(
+            f"bash -c '(cd {wittypi_dir}/wittypi && source utilities.sh && "
+            "i2c_write 0x01 $I2C_MC_ADDRESS $I2C_CONF_DEFAULT_ON 0x01)'",
+            check=False,
+        )
+        ui.success("Witty Pi register 17 = 0x01 (Default ON)")
+    else:
+        # utilities.sh not deployed yet (very first run before install.sh) —
+        # fall back to raw i2cset; the wrapper will be used on re-runs.
+        ui.info("Setting Witty Pi default-ON via i2cset (utilities.sh not deployed yet) ...")
+        ui.run("i2cset -y 1 0x08 17 0x01 2>/dev/null || true", check=False)
+        ui.success("Witty Pi register 17 = 0x01 (Default ON, raw i2cset)")
 
     # ── Already installed? ────────────────────────────────────────────
     if os.path.isfile("/etc/init.d/wittypi"):
@@ -558,19 +478,6 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
         )
         ui.success(f"UWI configured for {wg_ip}:8000")
 
-    # ── Set default-ON power state ────────────────────────────────────
-    # I2C register 17 (I2C_CONF_DEFAULT_ON) on bus 1, address 0x08:
-    #   0x00 = Default OFF (button press required to power on)
-    #   0x01 = Default ON  (auto-power when supply is connected)
-    # Uses Witty Pi's own i2c_write (write + verify + retry up to 4x)
-    # instead of raw i2cset which silently fails if the MCU is busy.
-    ui.info("Setting Witty Pi to 'Default ON' (auto-power) ...")
-    ui.run(
-        "cd /opt/implant/wittypi/wittypi && source utilities.sh && i2c_write 0x01 $I2C_MC_ADDRESS $I2C_CONF_DEFAULT_ON 0x01",
-        check=False,
-    )
-    ui.success("Witty Pi set to Default ON (register 17 = 0x01)")
-
     # ── Verify ────────────────────────────────────────────────────────
     if os.path.isfile("/etc/init.d/wittypi"):
         ui.success("Witty Pi 4 installed and daemon registered")
@@ -580,23 +487,3 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
     return False
 
 
-def _ensure_dotnet_env() -> None:
-    """Append .NET environment variables to ``/root/.bashrc`` if missing."""
-    bashrc = "/root/.bashrc"
-    if not os.path.isfile(bashrc):
-        return
-    with open(bashrc, "r") as fh:
-        content = fh.read()
-
-    additions: list[str] = []
-    if "DOTNET_ROOT" not in content:
-        additions.append("export DOTNET_ROOT=/root/.dotnet")
-    if "/root/.dotnet" not in content:
-        additions.append("export PATH=$PATH:/root/.dotnet")
-    if "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT" not in content:
-        additions.append("export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1")
-
-    if additions:
-        with open(bashrc, "a") as fh:
-            fh.write("\n# PhantomPi — .NET SDK environment\n")
-            fh.write("\n".join(additions) + "\n")

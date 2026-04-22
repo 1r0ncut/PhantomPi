@@ -225,7 +225,7 @@ def setup_wireguard(config: dict, ui: UI, skipped: list) -> bool:
         )
         return False
 
-    implant_addr = get(config, "wireguard", "implant_address",      default="10.8.0.3/24")
+    implant_addr = get(config, "wireguard", "implant_address",      default="")
     allowed_ips  = get(config, "wireguard", "allowed_ips",          default="10.8.0.0/24")
     keepalive    = get(config, "wireguard", "persistent_keepalive", default=25)
     lte_iface    = get(config, "network",   "lte_interface",        default="eth1")

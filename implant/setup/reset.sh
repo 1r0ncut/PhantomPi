@@ -6,8 +6,8 @@
 # scratch on the same SD card without re-imaging.
 #
 # Usage:
-#   sudo bash setup/reset.sh           # quick reset (keeps WG keys + BruteShark build)
-#   sudo bash setup/reset.sh --full    # remove everything including keys & .NET build
+#   sudo bash setup/reset.sh           # quick reset (keeps WG keys)
+#   sudo bash setup/reset.sh --full    # remove everything including keys
 #
 # What is NOT removed (safe to leave for re-runs):
 #   - APT packages (reinstalling them is slow and idempotent)
@@ -74,10 +74,10 @@ UNITS=(
     wg-keepalive.timer  wg-keepalive.service
     bridge-sync.timer   bridge-sync.service
     power-monitor.timer power-monitor.service
-    discord.service
+    cred-analyzer.timer cred-analyzer.service
+    implant-api.service
     packet-sniffer.service
     hidden-hotspot.service
-    bruteshark.service
     wg-quick@wg0.service
 )
 
@@ -88,49 +88,31 @@ done
 success "Services stopped and disabled"
 
 # ── 2. Remove systemd unit symlinks ──────────────────────────────────────
-info "Removing systemd unit symlinks ..."
+info "Removing systemd unit registrations ..."
 
-SYMLINKS=(
+UNITS=(
     bridge-sync.service   bridge-sync.timer
-    bruteshark.service
-    discord.service
+    implant-api.service
     hidden-hotspot.service
+    cred-analyzer.service cred-analyzer.timer
     packet-sniffer.service
     power-monitor.service power-monitor.timer
     wg-keepalive.service  wg-keepalive.timer
 )
 
-for unit in "${SYMLINKS[@]}"; do
-    rm -f "/etc/systemd/system/$unit"
+for unit in "${UNITS[@]}"; do
+    systemctl disable "$unit" 2>/dev/null || true
+    systemctl unlink  "$unit" 2>/dev/null || true
 done
 systemctl daemon-reload
-success "Systemd symlinks removed"
+success "Systemd units disabled and unlinked"
 
 # ── 3. Remove /opt/implant/ ──────────────────────────────────────────────
 info "Removing /opt/implant/ ..."
 
 if [ -d /opt/implant ]; then
-    if [ "$FULL" = true ]; then
-        rm -rf /opt/implant
-        success "Removed /opt/implant/ entirely (--full)"
-    else
-        # Preserve BruteShark compiled binary (avoids 10+ min rebuild)
-        BS_TMP=""
-        if [ -d /opt/implant/scripts/BruteShark ]; then
-            BS_TMP=$(mktemp -d)
-            cp -a /opt/implant/scripts/BruteShark "$BS_TMP/"
-        fi
-
-        rm -rf /opt/implant
-
-        if [ -n "$BS_TMP" ]; then
-            mkdir -p /opt/implant/scripts
-            mv "$BS_TMP/BruteShark" /opt/implant/scripts/
-            rm -rf "$BS_TMP"
-            warn "Preserved BruteShark build (use --full to remove)"
-        fi
-        success "Removed /opt/implant/ (BruteShark build preserved)"
-    fi
+    rm -rf /opt/implant
+    success "Removed /opt/implant/"
 else
     success "/opt/implant/ does not exist — nothing to remove"
 fi
@@ -211,6 +193,7 @@ success "Boot hardening removed"
 # ── 9. Remove logrotate configs ──────────────────────────────────────────
 info "Removing logrotate configurations ..."
 rm -f /etc/logrotate.d/bridge-sync
+rm -f /etc/logrotate.d/cred-analyzer
 rm -f /etc/logrotate.d/wg-keepalive
 rm -f /etc/logrotate.d/power-monitor
 success "Logrotate configs removed"
@@ -224,12 +207,9 @@ success "Helper symlinks removed"
 
 # ── 11. Full-mode extras ─────────────────────────────────────────────────
 if [ "$FULL" = true ]; then
-    info "Cleaning .NET environment from /root/.bashrc ..."
-    sed -i '/# PhantomPi.*\.NET/d' /root/.bashrc 2>/dev/null || true
-    sed -i '/DOTNET_ROOT/d'        /root/.bashrc 2>/dev/null || true
-    sed -i '/DOTNET_SYSTEM_GLOBALIZATION_INVARIANT/d' /root/.bashrc 2>/dev/null || true
-    rm -f /usr/local/bin/BruteSharkCli
-    success ".NET environment and BruteShark symlink removed"
+    info "Cleaning cred-analyzer logs ..."
+    rm -rf /opt/implant/logs/cred-analyzer
+    success "Cred-analyzer logs removed"
 fi
 
 # ── 12. Witty Pi — uninstall via official script & clear hardware ─────────
@@ -278,7 +258,12 @@ if command -v i2cset &>/dev/null; then
     info "Clearing Witty Pi MCU registers (I2C 0x08) ..."
 
     # Reg 17: power-on default state = 0 (default-off, button-press only)
-    i2cset -y 1 0x08 17 0x00 2>/dev/null || true
+    # Uses Witty Pi's own i2c_write (write + verify + retry) instead of raw i2cset
+    if [ -f /opt/implant/wittypi/wittypi/utilities.sh ]; then
+        (cd /opt/implant/wittypi/wittypi && source utilities.sh && i2c_write 0x01 $I2C_MC_ADDRESS $I2C_CONF_DEFAULT_ON 0x00) 2>/dev/null || true
+    else
+        i2cset -y 1 0x08 17 0x00 2>/dev/null || true
+    fi
 
     # Regs 27-31: ALARM1 (scheduled startup) — clear all 5 bytes
     for reg in 27 28 29 30 31; do
@@ -343,8 +328,6 @@ echo
 if [ "$FULL" != true ]; then
     echo -e "  ${YELLOW}Preserved (use --full to remove):${RESET}"
     echo -e "    - WireGuard keys (/etc/wireguard/private.key, public.key)"
-    echo -e "    - BruteShark compiled binary (/opt/implant/scripts/BruteShark/)"
-    echo -e "    - .NET SDK (/root/.dotnet/)"
     echo -e "    - APT/pip packages"
     echo
 fi

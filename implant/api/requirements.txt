@@ -1,0 +1,5 @@
+Flask
+Flask-HTTPAuth
+gunicorn
+requests
+scapy

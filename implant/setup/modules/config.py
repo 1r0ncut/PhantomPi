@@ -48,7 +48,7 @@ def get_implant_ip(config: dict) -> str:
     Return the bare IPv4 address from ``wireguard.implant_address``
     (strips the CIDR suffix, e.g. ``10.8.0.3/24`` -> ``10.8.0.3``).
     """
-    addr = get(config, "wireguard", "implant_address", default="10.8.0.3/24")
+    addr = get(config, "wireguard", "implant_address", default="")
     return addr.split("/")[0]
 
 
@@ -102,19 +102,6 @@ def validate_config(config: dict) -> list[str]:
         warnings.append(
             "hotspot.psk is empty or shorter than 8 characters "
             "— hotspot profile will NOT be created"
-        )
-
-    # -- Discord notifications (nice-to-have) ------------------------------
-    dc = config.get("discord", {})
-    if not dc.get("bridge_sync_webhook_url"):
-        warnings.append(
-            "discord.bridge_sync_webhook_url is empty "
-            "— bridge up/down notifications disabled"
-        )
-    if not dc.get("bruteshark_webhook_url"):
-        warnings.append(
-            "discord.bruteshark_webhook_url is empty "
-            "— credential-extraction notifications disabled"
         )
 
     return warnings
