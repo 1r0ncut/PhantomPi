@@ -288,6 +288,6 @@ STL files for the custom 3D-printed case:
 
 ## Changelog
 
-- **[v1.1](https://github.com/1r0ncut/PhantomPi/releases/tag/v1.1)**: Replaced Discord bot with OpenClaw AI assistant; real-time credential push via webhook, natural-language C2, modular skill system
+- **[v1.1](https://github.com/1r0ncut/PhantomPi/releases/tag/v1.1)**: Replaced Discord bot with OpenClaw AI assistant; real-time credential push via webhook, natural-language C2, modular skill system ([Implant API and OpenClaw Skills](docs/skills-and-api.md))
 - **[v1.0](https://github.com/1r0ncut/PhantomPi/releases/tag/v1.0)**: Initial release, transparent bridge, 802.1X bypass, identity spoofing, LTE out-of-band C2, Discord bot
 
