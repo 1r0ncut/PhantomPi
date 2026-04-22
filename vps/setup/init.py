@@ -555,6 +555,8 @@ def step_daemon(cfg: dict, ui: UI, skipped: list) -> None:
         f"WorkingDirectory={OC_HOME}\n"
         f"Environment=HOME={OC_HOME}\n"
         "Environment=NODE_ENV=production\n"
+        "Environment=OPENCLAW_DISABLE_BONJOUR=1\n"
+        f"EnvironmentFile={OPENCLAW_HOME}/.env\n"
         f"ExecStart={oc_bin} gateway --bind custom --port 18789\n"
         "Restart=on-failure\n"
         "RestartSec=5\n"
