@@ -323,24 +323,35 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
 
     # ── Always: set default-ON power state ───────────────────────────
     # Register 17 (I2C_CONF_DEFAULT_ON) must be written on every setup
-    # run, not just the first.  It sits below the daemon-registration
-    # checks, so it was silently skipped on every re-run and whenever
-    # install.sh registered the daemon itself.  Do it unconditionally
-    # first; the write is idempotent and safe at any point after I2C
-    # is enabled (which install.sh or a prior run has already done).
+    # run — it was previously skipped due to early returns in the daemon
+    # registration flow.
+    #
+    # ui.run() uses subprocess shell=True which invokes /bin/sh (dash on
+    # Kali/Debian).  dash does not support the 'source' builtin, so all
+    # commands that source utilities.sh must be wrapped in bash -c '...'.
+    # reset.sh avoids this because it declares #!/bin/bash at the top.
+    #
+    # On a truly fresh image the I2C kernel module may not be loaded yet.
+    # We load it live (no reboot needed for the module) before the write.
+    ui.run(
+        "modprobe i2c-bcm2835 2>/dev/null || modprobe i2c-bcm2708 2>/dev/null || true",
+        check=False,
+    )
+    ui.run("modprobe i2c-dev 2>/dev/null || true", check=False)
+
     utilities_sh = os.path.join(wittypi_dir, "wittypi", "utilities.sh")
     if os.path.isfile(utilities_sh):
         ui.info("Setting Witty Pi to 'Default ON' (auto-power on supply) ...")
         ui.run(
-            f"cd {wittypi_dir}/wittypi && "
-            "source utilities.sh && "
-            "i2c_write 0x01 $I2C_MC_ADDRESS $I2C_CONF_DEFAULT_ON 0x01",
+            f"bash -c '(cd {wittypi_dir}/wittypi && source utilities.sh && "
+            "i2c_write 0x01 $I2C_MC_ADDRESS $I2C_CONF_DEFAULT_ON 0x01)'",
             check=False,
         )
         ui.success("Witty Pi register 17 = 0x01 (Default ON)")
     else:
-        # utilities.sh not yet deployed — fall back to raw i2cset
-        ui.info("Setting Witty Pi default-ON via i2cset (utilities.sh not found) ...")
+        # utilities.sh not deployed yet (very first run before install.sh) —
+        # fall back to raw i2cset; the wrapper will be used on re-runs.
+        ui.info("Setting Witty Pi default-ON via i2cset (utilities.sh not deployed yet) ...")
         ui.run("i2cset -y 1 0x08 17 0x01 2>/dev/null || true", check=False)
         ui.success("Witty Pi register 17 = 0x01 (Default ON, raw i2cset)")
 
