@@ -433,20 +433,36 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
         ui.warning("OpenClaw config template not found — create manually")
 
     # ── Install OpenClaw binary (config already in place — no wizard) ─
-    r = ui.run("command -v openclaw 2>/dev/null", check=False)
-    if r.returncode != 0:
+    # Check as the openclaw user — the binary lands in their ~/.local/bin/
+    # which is not in root's PATH, so a plain `command -v` as root misses it.
+    r = ui.run(
+        "su -s /bin/bash openclaw -c 'command -v openclaw' 2>/dev/null "
+        "|| find /home/openclaw /usr/local/bin /usr/bin "
+        "   -maxdepth 4 -name openclaw -type f 2>/dev/null | head -1",
+        check=False,
+    )
+    if not r.stdout.strip():
         ui.info("Installing OpenClaw ...")
         try:
+            # Run as the openclaw user so $HOME resolves to /home/openclaw.
+            # The installer checks ~/.openclaw/ to skip the setup wizard —
+            # it must find the config we already wrote there.
             ui.run(
-                "curl -fsSL https://openclaw.ai/install.sh | bash",
+                f"su -s /bin/bash {OC_USER} -c "
+                f"'curl -fsSL https://openclaw.ai/install.sh | bash'",
                 timeout=600,
             )
             ui.success("OpenClaw installed")
         except RuntimeError:
             # Installer can take several minutes on a fresh VPS.
             # If it timed out but the binary landed, treat it as success.
-            r2 = ui.run("command -v openclaw 2>/dev/null", check=False)
-            if r2.returncode == 0:
+            r2 = ui.run(
+                "su -s /bin/bash openclaw -c 'command -v openclaw' 2>/dev/null "
+                "|| find /home/openclaw /usr/local/bin /usr/bin "
+                "   -maxdepth 4 -name openclaw -type f 2>/dev/null | head -1",
+                check=False,
+            )
+            if r2.stdout.strip():
                 ui.warning(
                     "OpenClaw installer exceeded timeout but binary is present — continuing"
                 )
@@ -528,9 +544,14 @@ def step_daemon(cfg: dict, ui: UI, skipped: list) -> None:
 
     ui.info(f"Installing OpenClaw gateway as system service ({OC_USER}) ...")
 
-    # Locate the openclaw binary
-    r = ui.run("command -v openclaw", check=False)
-    oc_bin = r.stdout.strip() if r.returncode == 0 else "/usr/bin/openclaw"
+    # Locate the openclaw binary (may live in the openclaw user's ~/.local/bin)
+    r = ui.run(
+        "su -s /bin/bash openclaw -c 'command -v openclaw' 2>/dev/null "
+        "|| find /home/openclaw /usr/local/bin /usr/bin "
+        "   -maxdepth 4 -name openclaw -type f 2>/dev/null | head -1",
+        check=False,
+    )
+    oc_bin = r.stdout.strip() or "/home/openclaw/.local/bin/openclaw"
 
     # Get WG IP for bind address (computed in step_openclaw)
     r = ui.run("ip -4 addr show wg0 2>/dev/null | grep -oP 'inet \\K[0-9.]+'",
