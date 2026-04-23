@@ -272,7 +272,7 @@ flowchart TB
 ├── openclaw.json           # OpenClaw configuration
 ├── .env                    # API keys and tokens (600)
 └── workspace/
-    ├── SOUL.md             # Shared operator context injected into every conversation
+    ├── SOUL.md             # PhantomPi context and inner workings
     └── IDENTITY.md         # Bot persona (PhantomClaw)
 
 /opt/implant/openclaw/
