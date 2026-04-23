@@ -268,8 +268,14 @@ flowchart TB
 #### Resulting Filesystem Layout
 
 ```
-/opt/implant/openclaw/
+/home/openclaw/
 ├── openclaw.json           # OpenClaw configuration
+├── .env                    # API keys and tokens (600)
+└── workspace/
+    ├── SOUL.md             # Shared operator context injected into every conversation
+    └── IDENTITY.md         # Bot persona (PhantomClaw)
+
+/opt/implant/openclaw/
 ├── skills/
 │   ├── implant-status/     # Natural-language status queries
 │   ├── cred-sniffer/       # Credential analysis & reporting
