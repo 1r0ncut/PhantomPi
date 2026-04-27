@@ -393,7 +393,7 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
     if os.path.isfile(init_sh):
         ui.info("Registering Witty Pi daemon from vendor init.sh template ...")
         ui.run(
-            f"sed -e 's#/home/pi/wittypi#{wittypi_dir}#g' "
+            f"sed -e 's#/home/[^/]*/wittypi#{wittypi_dir}#g' "
             f"'{init_sh}' > /etc/init.d/wittypi && "
             f"chmod +x /etc/init.d/wittypi && "
             f"update-rc.d wittypi defaults",
@@ -451,7 +451,7 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
         if os.path.isfile(uwi_initd_tmpl):
             ui.info("Registering UWI init.d entry ...")
             ui.run(
-                f"sed -e 's#/home/pi/uwi#{uwi_dir}#g' "
+                f"sed -e 's#/home/[^/]*/uwi#{uwi_dir}#g' "
                 f"'{uwi_initd_tmpl}' > /etc/init.d/uwi && "
                 f"chmod +x /etc/init.d/uwi && "
                 f"update-rc.d uwi defaults",
@@ -463,6 +463,13 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
                        "started manually")
     else:
         ui.success("UWI init.d entry already registered")
+
+    # ── Ensure WittyPi binaries are executable ──────────────────────
+    ui.run(
+        f"find {wittypi_dir} -type f \\( -name '*.sh' -o -name 'websocketd' -o -name 'daemon.sh' \\) "
+        f"-exec chmod +x {{}} +",
+        check=False,
+    )
 
     # ── Configure UWI to bind to WireGuard IP ───────────────────────
     # install.sh runs the UWI installer which may overwrite uwi.conf.
