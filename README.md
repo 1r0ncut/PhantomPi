@@ -273,6 +273,7 @@ flowchart TB
 │   ├── openclaw.json       # OpenClaw configuration
 │   └── .env                # API keys and tokens (600)
 ├── workspace/
+│   ├── AGENTS.md           # Hard rules: output format, multi-implant handling
 │   ├── SOUL.md             # PhantomPi context and inner workings
 │   └── IDENTITY.md         # Bot persona (PhantomClaw)
 └── skills/
