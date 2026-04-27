@@ -269,18 +269,16 @@ flowchart TB
 
 ```
 /home/openclaw/
-├── openclaw.json           # OpenClaw configuration
-├── .env                    # API keys and tokens (600)
-└── workspace/
-    ├── SOUL.md             # PhantomPi context and inner workings
-    └── IDENTITY.md         # Bot persona (PhantomClaw)
-
-/opt/implant/openclaw/
-├── skills/
-│   ├── implant-status/     # Natural-language status queries
-│   ├── cred-sniffer/       # Credential analysis & reporting
-│   └── bridge-sync/        # Bridge event notifications
-└── logs/                   # OpenClaw runtime logs
+├── .openclaw/
+│   ├── openclaw.json       # OpenClaw configuration
+│   └── .env                # API keys and tokens (600)
+├── workspace/
+│   ├── SOUL.md             # PhantomPi context and inner workings
+│   └── IDENTITY.md         # Bot persona (PhantomClaw)
+└── skills/
+    ├── implant-status/     # Natural-language status queries
+    ├── cred-sniffer/       # Credential analysis & reporting
+    └── bridge-sync/        # Bridge event notifications
 ```
 
 ## 3D Enclosure

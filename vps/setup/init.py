@@ -34,11 +34,10 @@ REPO_DIR  = os.path.dirname(SETUP_DIR)
 
 TOTAL_STEPS = 4
 
-OPENCLAW_DIR = "/opt/implant/openclaw"
-SKILLS_DIR   = os.path.join(OPENCLAW_DIR, "skills")
 OC_USER      = "openclaw"
 OC_HOME      = f"/home/{OC_USER}"
 OPENCLAW_HOME = f"{OC_HOME}/.openclaw"
+SKILLS_DIR   = os.path.join(OC_HOME, "skills")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -471,7 +470,7 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
             ui.run(f"chown -R {OC_USER}:{OC_USER} {oc_pkg}", check=False)
             ui.success(f"Plugin directory ownership fixed")
 
-    # ── Deploy skills to /opt/openclaw/skills/ ───────────────────────
+    # ── Deploy skills to ~/skills/ ───────────────────────────────────
     skills_src = os.path.join(REPO_DIR, "openclaw", "skills")
     os.makedirs(SKILLS_DIR, exist_ok=True)
 
@@ -491,23 +490,6 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
         ui.success("Skills deployed")
     else:
         ui.warning(f"Skills source not found at {skills_src}")
-
-    # ── Also deploy skills to ~/.openclaw/skills/ as fallback ────────
-    user_skills = os.path.join(OPENCLAW_HOME, "skills")
-    os.makedirs(user_skills, exist_ok=True)
-    if os.path.isdir(skills_src):
-        for item in os.listdir(skills_src):
-            s = os.path.join(skills_src, item)
-            d = os.path.join(user_skills, item)
-            if os.path.isdir(s):
-                if os.path.isdir(d):
-                    shutil.rmtree(d)
-                shutil.copytree(s, d)
-        for root, dirs, files in os.walk(user_skills):
-            for f in files:
-                if f.endswith(".sh"):
-                    os.chmod(os.path.join(root, f), 0o755)
-        ui.success("Skills also deployed to ~/.openclaw/skills/")
 
     # ── Deploy workspace context files (SOUL.md etc.) ────────────────
     workspace_src = os.path.join(REPO_DIR, "openclaw", "workspace")

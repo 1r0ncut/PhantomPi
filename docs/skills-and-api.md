@@ -32,8 +32,8 @@ When the operator asks something in Discord, OpenClaw selects the matching skill
 |------|---------|
 | `/home/openclaw/.openclaw/openclaw.json` | OpenClaw runtime config (agents, hooks, channels) |
 | `/home/openclaw/.openclaw/.env` | Secrets (Discord token, API keys) |
-| `/opt/implant/openclaw/skills/<name>/SKILL.md` | Skill definition: triggers, instructions, Discord formatting |
-| `/opt/implant/openclaw/skills/<name>/scripts/` | Shell scripts the skill can invoke |
+| `/home/openclaw/skills/<name>/SKILL.md` | Skill definition: triggers, instructions, Discord formatting |
+| `/home/openclaw/skills/<name>/scripts/` | Shell scripts the skill can invoke |
 
 ### Implant side
 
@@ -55,7 +55,7 @@ A skill lives entirely on the VPS. It tells OpenClaw when to activate, what scri
 ### 1. Create the skill directory
 
 ```
-/opt/implant/openclaw/skills/<skill-name>/
+/home/openclaw/skills/<skill-name>/
 ├── SKILL.md
 └── scripts/
     └── <script>.sh

@@ -48,7 +48,7 @@
 
     "skills": {
         "load": {
-            "extraDirs": ["/opt/implant/openclaw/skills"]
+            "extraDirs": ["/home/openclaw/skills"]
         }
     },
 
