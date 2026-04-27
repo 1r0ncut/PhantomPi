@@ -15,16 +15,13 @@ security-relevant credentials during **authorised** red-team engagements.
 
 ## Checking for captured credentials
 
-Each call queries **one** implant:
+Each call queries **one** implant. Follow the `IMPLANT_IPS` rules in operator context for multi-implant queries.
 
 ```bash
 bash {baseDir}/scripts/check-findings.sh <IMPLANT_IP>
 ```
 
-- If only one implant is configured (`$IMPLANT_IPS`), omit the IP argument.
-- If the operator names a specific implant, pass that IP.
-- If the operator asks to check **all** implants, run the script once
-  per IP in `$IMPLANT_IPS` (comma-separated) and aggregate the results.
+Omit the IP argument if only one implant is configured.
 
 Returns JSON with fields:
 - `implant`: the queried IP
@@ -50,33 +47,6 @@ If `sniffer` is `"inactive"` the packet-sniffer is not running. Tell the operato
 4. Flag high-value accounts: Domain Admin, service accounts, `admin`, `root`.
 5. When summarising, count findings per type and call out the most critical.
 6. Never truncate the `secret` field. Operators need the full value.
-
-## Discord formatting
-
-Your output is rendered by **Discord**, not a markdown viewer.
-Only use formatting that Discord actually supports. If Discord would
-show it as raw text, do not use it.
-
-**Supported (use freely):**
-- `**bold**` for headings and labels
-- `*italic*` for emphasis
-- `` `inline code` `` for service names, IPs, paths, commands
-- ` ``` ` fenced code blocks for hashes, JSON, hashcat commands, or multi-line data (use the language hint, e.g. ` ```json `)
-- `> ` blockquotes for quoting output or notes
-- `- ` or `• ` bullet lists
-- `1.` numbered lists
-- `||spoiler||` for hiding sensitive credential values (optional)
-
-**Not supported (never use):**
-- `---` horizontal rules (renders as literal text)
-- Markdown tables `| col |` (renders as broken text)
-- Headings `#`, `##` (Discord ignores them in bot messages)
-- HTML tags
-
-**General rules:**
-- Wrap hashes, secrets, hashcat commands, JSON, and terminal output in fenced code blocks.
-- Keep responses compact. No filler, no empty lines between every bullet.
-- Respond in the same language the operator uses.
 
 ## Webhook alerts (cred-alert)
 

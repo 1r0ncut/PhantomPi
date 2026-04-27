@@ -12,14 +12,6 @@ metadata: {"openclaw":{"requires":{"bins":["curl"]},"os":["linux"]}}
 
 You report the operational status of PhantomPi implants for the operator.
 
-## Multiple implants
-
-`IMPLANT_IPS` is a comma-separated list of all configured implant IPs (e.g. `10.8.0.3,10.8.0.4`).
-**Always split on commas and run the script once per IP.** Never pass the full comma-separated string as a single IP.
-
-When the operator asks for a general status (e.g. "how are the implants?"), check all IPs and report each one.
-When the operator refers to a specific implant by IP or number, check only that one.
-
 ## Checking if an implant is alive
 
 ```bash
@@ -71,27 +63,3 @@ Each service shows a status emoji:
 3. Flag any inactive critical services.
 4. Only show full detail (routes, ports) if the operator asks for it.
 
-## Discord formatting
-
-Your output is rendered by **Discord**, not a markdown viewer.
-Only use formatting that Discord actually supports. If Discord would
-show it as raw text, do not use it.
-
-**Supported (use freely):**
-- `**bold**` for headings and labels
-- `*italic*` for emphasis
-- `` `inline code` `` for service names, IPs, paths, commands
-- ` ``` ` fenced code blocks for JSON, multi-line data (use the language hint, e.g. ` ```json `)
-- `> ` blockquotes for quoting output or notes
-- `- ` or `• ` bullet lists
-- `1.` numbered lists
-
-**Not supported (never use):**
-- `---` horizontal rules (renders as literal text)
-- Markdown tables `| col |` (renders as broken text)
-- Headings `#`, `##` (Discord ignores them in bot messages)
-- HTML tags
-
-**General rules:**
-- Keep responses compact. No filler, no empty lines between every bullet.
-- Respond in the same language the operator uses.
