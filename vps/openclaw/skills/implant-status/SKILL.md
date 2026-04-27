@@ -12,6 +12,14 @@ metadata: {"openclaw":{"requires":{"bins":["curl"]},"os":["linux"]}}
 
 You report the operational status of PhantomPi implants for the operator.
 
+## Multiple implants
+
+`IMPLANT_IPS` is a comma-separated list of all configured implant IPs (e.g. `10.8.0.3,10.8.0.4`).
+**Always split on commas and run the script once per IP.** Never pass the full comma-separated string as a single IP.
+
+When the operator asks for a general status (e.g. "how are the implants?"), check all IPs and report each one.
+When the operator refers to a specific implant by IP or number, check only that one.
+
 ## Checking if an implant is alive
 
 ```bash
