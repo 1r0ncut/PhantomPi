@@ -185,7 +185,7 @@ def _try(ui, label, fn, failures, debug):
 # ── 1. System packages ───────────────────────────────────────────────────
 
 def step_packages(ui: UI) -> None:
-    pkgs = ["wireguard-tools", "python3-venv", "curl"]
+    pkgs = ["wireguard-tools", "python3-venv", "curl", "netcat-openbsd"]
     missing: list[str] = []
     for p in pkgs:
         r = ui.run(f"dpkg-query -W -f='${{Status}}' {p} 2>/dev/null "

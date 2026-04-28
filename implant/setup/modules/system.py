@@ -39,6 +39,8 @@ APT_PACKAGES = [
     "git",
     # Witty Pi 4 (I2C communication with MCU)
     "i2c-tools",
+    # Pivot & session management
+    "tmux", "netcat-openbsd",
 ]
 
 # Bluetooth kernel modules to blacklist (cause boot stalls on the Pi)

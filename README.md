@@ -281,7 +281,8 @@ flowchart TB
 └── skills/
     ├── implant-status/     # Natural-language status queries
     ├── cred-sniffer/       # Credential analysis & reporting
-    └── bridge-sync/        # Bridge event notifications
+    ├── bridge-sync/        # Bridge event notifications
+    └── pivot/              # Network pivot & Ligolo-ng session management
 ```
 
 ## 3D Enclosure

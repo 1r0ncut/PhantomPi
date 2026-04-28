@@ -152,6 +152,12 @@ Before writing a new skill, check whether the implant API already exposes the da
 |----------|---------|
 | `GET /status` | Interface state, uptime, services, ports (clean JSON, no emojis) |
 | `GET /captured-creds` | All extracted credentials and hashes |
+| `GET /pivot-status` | Pivot readiness, spoofed identity from log, current veth1 routes, subnet suggestions from PCAPs |
+| `POST /pivot-setup` | Add routes through veth1 for specified subnets; gateway read from spoof-target log |
+| `POST /pivot-reset` | Remove specific or all routes from veth1 |
+| `GET /ligolo-sessions` | List active `ligolo-*` tmux sessions with proxy IP and running state |
+| `POST /ligolo-start` | Start ligolo-agent in a named tmux session connecting to operator's proxy |
+| `POST /ligolo-kill` | Kill a specific ligolo session or all of them |
 
 If the data you need is not available, add a new route.
 

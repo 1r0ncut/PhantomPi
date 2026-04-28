@@ -42,7 +42,7 @@
     "agents": {
         "defaults": {
             "model": "anthropic/claude-sonnet-4-6",
-            "skills": ["bridge-sync", "cred-sniffer", "implant-status"],
+            "skills": ["bridge-sync", "cred-sniffer", "implant-status", "pivot"],
         }
     },
 
