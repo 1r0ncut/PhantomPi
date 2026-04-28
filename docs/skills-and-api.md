@@ -70,7 +70,7 @@ name: my-skill
 description: >
   One or two sentences describing what this skill does and what phrases trigger it.
   Triggers on: keyword1, keyword2, keyword3.
-metadata: {"openclaw":{"requires":{"bins":["curl"]},"os":["linux"]}}
+metadata: {"openclaw":{"requires":{"bins":["curl","nc"]},"os":["linux"]}}
 ---
 
 # My Skill
@@ -82,42 +82,42 @@ Brief explanation of what this skill is for.
 Describe when and how the agent should invoke the script.
 
 \`\`\`bash
-bash {baseDir}/scripts/my-script.sh [IMPLANT_IP]
+# Check reachability first (optional)
+bash /home/openclaw/scripts/query-implant.sh --alive [IMPLANT_IP]
+
+# GET endpoint (queries all implants in IMPLANT_IPS)
+bash /home/openclaw/scripts/query-implant.sh /my-endpoint [IMPLANT_IP]
+
+# POST endpoint (targets a single implant)
+bash /home/openclaw/scripts/query-implant.sh --post /my-endpoint '{"key":"value"}' [IMPLANT_IP]
 \`\`\`
 
 ## Interpreting the output
 
 Explain what the script returns and how to present it.
-
-## Discord formatting
-
-Remind the agent of Discord formatting rules (bold, inline code, fenced blocks).
-No tables, no headings, no HTML.
 ```
 
-### 3. Write the script
+> **Note:** Discord formatting rules (bold, inline code, fenced blocks — no tables, no headings, no HTML) are defined globally in `AGENTS.md` and apply to every skill. Do not repeat them here.
 
-The script calls the implant API and returns structured output (JSON preferred):
+### 3. Write the script (optional)
+
+Most skills call the implant API directly from `SKILL.md` using the universal
+query script — no per-skill script is needed. Only add a script under
+`skills/<name>/scripts/` when you need complex pre/post-processing that cannot
+be done inline.
+
+If you do write a helper script, call `query-implant.sh` rather than curling
+the implant directly:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMPLANT_IP="${1:-${IMPLANT_IPS:-}}"
-PORT="${2:-8443}"
+IMPLANT_IP="${1:-${IMPLANT_IPS%%,*}}"   # default: first IP in the list
 
-if [ -z "$IMPLANT_IP" ]; then
-    echo '{"error":"No implant IP provided. Set implant_ips in OpenClaw config."}'
-    exit 1
-fi
+RESPONSE=$(bash /home/openclaw/scripts/query-implant.sh /my-endpoint "$IMPLANT_IP")
 
-RESPONSE=$(curl -sk --max-time 10 "https://${IMPLANT_IP}:${PORT}/my-endpoint" 2>/dev/null || echo "")
-
-if [ -z "$RESPONSE" ]; then
-    echo "{\"implant\":\"${IMPLANT_IP}\",\"error\":\"unreachable\"}"
-    exit 1
-fi
-
+# ... process $RESPONSE ...
 echo "$RESPONSE"
 ```
 
@@ -137,7 +137,7 @@ Add the skill name to the `skills` list in `/home/openclaw/.openclaw/openclaw.js
 ### 5. Reload OpenClaw
 
 ```bash
-sudo systemctl restart openclaw
+sudo systemctl restart openclaw-gateway.service
 ```
 
 Then type `/new` in Discord to start a fresh session that reads the updated skill list.
@@ -185,10 +185,10 @@ def register(app):
         return jsonify(data)
 ```
 
-**2. Deploy to the implant:**
+**2. Deploy to the implant** (run on the implant from the cloned repo root):
 
 ```bash
-scp implant/api/app/routes/my_endpoint.py root@<implant-ip>:/opt/implant/api/app/routes/
+cp implant/api/app/routes/my_endpoint.py /opt/implant/api/app/routes/
 systemctl restart implant-api
 ```
 
