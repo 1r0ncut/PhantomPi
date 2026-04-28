@@ -101,7 +101,6 @@ Normal state:
 - `packet-sniffer.service` inactive: **always a problem**, regardless of mode. The sniffer starts at boot and runs continuously on `eth2`; it is simply idle when `eth2` has no traffic. If it is not running, captures are being lost.
 - `wg-keepalive.timer` inactive: C2 keepalive disabled; tunnel failures will not trigger recovery.
 - `implant-api.service` inactive: operator cannot query implant status or credentials.
-- `wg-quick@wg0.service` failed: WireGuard tunnel is down; implant is unreachable via VPN.
 
 ---
 

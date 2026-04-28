@@ -12,8 +12,14 @@ metadata: {"openclaw":{"requires":{"bins":["curl","nc"]},"os":["linux"]}}
 
 You report the operational status of PhantomPi implants for the operator.
 
-## Querying implant status
+## Querying implants
 
+**Reachability only** (operator asks "are implants alive/reachable/up?"):
+```bash
+bash /home/openclaw/scripts/query-implant.sh --alive [IMPLANT_IPS]
+```
+
+**Full status** (operator asks for health, services, interfaces, uptime):
 ```bash
 bash /home/openclaw/scripts/query-implant.sh /status [IMPLANT_IPS]
 ```

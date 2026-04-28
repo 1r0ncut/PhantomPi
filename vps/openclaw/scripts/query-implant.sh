@@ -2,23 +2,22 @@
 # query-implant.sh — Universal PhantomPi implant API query script
 #
 # Usage:
-#   bash query-implant.sh <endpoint> [ip1,ip2,...]
+#   bash query-implant.sh --alive  [ip1,ip2,...]   # TCP reachability only, no API call
+#   bash query-implant.sh <endpoint> [ip1,ip2,...]  # full API query
 #
 # If no IPs are given, reads from $IMPLANT_IPS (comma-separated).
 # Alive check: TCP connect to port 8443 — no dedicated /alive endpoint.
 #
 # Output: JSON object keyed by implant IP, e.g.:
-#   {
-#     "10.8.0.3": {"alive": true,  "data": {...}},
-#     "10.8.0.4": {"alive": false, "data": null}
-#   }
+#   --alive:   {"10.8.0.3": {"alive": true},  "10.8.0.4": {"alive": false}}
+#   /status:   {"10.8.0.3": {"alive": true, "data": {...}}, "10.8.0.4": {"alive": false, "data": null}}
 
 set -euo pipefail
 
-ENDPOINT="${1:?Usage: query-implant.sh <endpoint> [ip1,ip2,...]}"
+MODE="${1:?Usage: query-implant.sh --alive|<endpoint> [ip1,ip2,...]}"
 IPS_RAW="${2:-${IMPLANT_IPS:-}}"
 PORT="${PORT:-8443}"
-CONNECT_TIMEOUT=3
+CONNECT_TIMEOUT=5
 QUERY_TIMEOUT=10
 
 if [ -z "$IPS_RAW" ]; then
@@ -36,16 +35,24 @@ for IP in "${IPS[@]}"; do
     [ -z "$IP" ] && continue
 
     if nc -z -w "$CONNECT_TIMEOUT" "$IP" "$PORT" 2>/dev/null; then
-        DATA=$(curl -sk --max-time "$QUERY_TIMEOUT" \
-            "https://${IP}:${PORT}${ENDPOINT}" 2>/dev/null || true)
-        if [ -n "$DATA" ] && echo "$DATA" | python3 -c \
-            "import sys, json; json.load(sys.stdin)" 2>/dev/null; then
-            entries+="${sep}\"${IP}\":{\"alive\":true,\"data\":${DATA}}"
+        if [ "$MODE" = "--alive" ]; then
+            entries+="${sep}\"${IP}\":{\"alive\":true}"
         else
-            entries+="${sep}\"${IP}\":{\"alive\":true,\"data\":null,\"error\":\"bad response\"}"
+            DATA=$(curl -sk --max-time "$QUERY_TIMEOUT" \
+                "https://${IP}:${PORT}${MODE}" 2>/dev/null || true)
+            if [ -n "$DATA" ] && echo "$DATA" | python3 -c \
+                "import sys, json; json.load(sys.stdin)" 2>/dev/null; then
+                entries+="${sep}\"${IP}\":{\"alive\":true,\"data\":${DATA}}"
+            else
+                entries+="${sep}\"${IP}\":{\"alive\":true,\"data\":null,\"error\":\"bad response\"}"
+            fi
         fi
     else
-        entries+="${sep}\"${IP}\":{\"alive\":false,\"data\":null}"
+        if [ "$MODE" = "--alive" ]; then
+            entries+="${sep}\"${IP}\":{\"alive\":false}"
+        else
+            entries+="${sep}\"${IP}\":{\"alive\":false,\"data\":null}"
+        fi
     fi
 
     sep=","

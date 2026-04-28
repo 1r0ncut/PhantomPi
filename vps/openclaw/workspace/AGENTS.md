@@ -29,10 +29,15 @@ Keep responses compact. No filler, no empty lines between every bullet. Respond 
 All skills use a single universal query script that handles multi-implant iteration internally:
 
 ```bash
-bash /home/openclaw/scripts/query-implant.sh <endpoint> [ips]
+bash /home/openclaw/scripts/query-implant.sh --alive   [ips]   # reachability only
+bash /home/openclaw/scripts/query-implant.sh <endpoint> [ips]   # full API query
 ```
 
-- For general queries (all implants): omit the IP argument. The script reads `$IMPLANT_IPS` automatically.
-- For targeted queries (specific IP or implant number): pass only that IP as the second argument.
+- Use `--alive` when the operator only asks if implants are reachable. It runs a TCP check only — no API call, instant response.
+- Use an endpoint (e.g. `/status`, `/captured-creds`) for full data queries.
+- Omit the IP argument for general queries: the script reads `$IMPLANT_IPS` automatically.
+- Pass a specific IP for targeted queries.
 
-Never split and loop manually. One call returns all results aggregated into a single JSON object keyed by implant IP. Unreachable implants appear as `{"alive": false, "data": null}`.
+Never split and loop manually. One call returns all results aggregated into a single JSON object keyed by implant IP.
+- `--alive` output: `{"10.8.0.3": {"alive": true}, "10.8.0.4": {"alive": false}}`
+- Endpoint output: `{"10.8.0.3": {"alive": true, "data": {...}}, "10.8.0.4": {"alive": false, "data": null}}`
