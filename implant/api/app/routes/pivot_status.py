@@ -1,9 +1,10 @@
 """
 Pivot status endpoint: returns pivot readiness, spoofed identity from the
 spoof-target log, current routes on veth1, and internal subnet suggestions
-derived from captured traffic PCAPs.
+derived from captured traffic PCAPs and credential findings.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -11,12 +12,12 @@ from collections import defaultdict
 
 from flask import jsonify
 
-VETH_IN  = "veth0"
-VETH_OUT = "veth1"
-SPOOF_LOG = "/opt/implant/logs/spoof-target/spoof-target.log"
-PCAP_DIR  = "/opt/implant/logs/packet-sniffer"
-PCAP_LIMIT = 5       # most recent PCAP files to analyse
-PACKET_CAP = 50000   # max packets read per PCAP (keeps response fast)
+VETH_IN       = "veth0"
+VETH_OUT      = "veth1"
+SPOOF_LOG     = "/opt/implant/logs/spoof-target/spoof-target.log"
+PCAP_DIR      = "/opt/implant/logs/packet-sniffer"
+FINDINGS_FILE = "/opt/implant/logs/cred-analyzer/findings.json"
+PCAP_LIMIT    = 2       # most recent PCAPs to read in full (no packet cap)
 
 # RFC 1918 ranges as (base, mask) integer pairs
 _RFC1918 = [
@@ -105,44 +106,72 @@ def _current_routes():
 
 
 def _suggest_subnets():
-    """Analyse recent PCAPs and return ranked list of internal subnets."""
-    if not os.path.isdir(PCAP_DIR):
-        return []
-
-    try:
-        all_files = [
-            os.path.join(PCAP_DIR, f)
-            for f in os.listdir(PCAP_DIR)
-            if f.endswith(".pcap")
-        ]
-        pcaps = sorted(all_files, key=os.path.getmtime, reverse=True)[:PCAP_LIMIT]
-    except OSError:
-        return []
-
-    if not pcaps:
-        return []
-
+    """
+    Return ranked list of internal subnets from two sources:
+    1. Recent PCAPs (tshark): live traffic analysis
+    2. Credential findings: destination IPs from cred-analyzer findings.json
+       (persists across PCAP rotation, so nothing is lost)
+    """
     subnet_data = defaultdict(lambda: {"packets": 0, "protocols": set()})
 
-    for pcap in pcaps:
-        out = _run(
-            f"tshark -r {pcap} -c {PACKET_CAP} -T fields "
-            f"-e ip.dst -e _ws.col.Protocol "
-            f"-Y 'ip and not ip.dst == 255.255.255.255' 2>/dev/null"
-        )
-        for line in out.splitlines():
-            parts = line.split("\t")
-            dst_ip = parts[0].strip() if parts else ""
-            if not dst_ip or not _is_rfc1918(dst_ip):
-                continue
-            subnet = _to_slash24(dst_ip)
-            if not subnet:
-                continue
-            subnet_data[subnet]["packets"] += 1
-            if len(parts) > 1:
-                proto = parts[1].strip()
+    # Source 1: recent PCAPs
+    if os.path.isdir(PCAP_DIR):
+        try:
+            all_files = [
+                os.path.join(PCAP_DIR, f)
+                for f in os.listdir(PCAP_DIR)
+                if f.endswith(".pcap")
+            ]
+            pcaps = sorted(all_files, key=os.path.getmtime, reverse=True)[:PCAP_LIMIT]
+        except OSError:
+            pcaps = []
+
+        for pcap in pcaps:
+            out = _run(
+                f"tshark -r '{pcap}' -T fields "
+                f"-e ip.dst -e _ws.col.Protocol "
+                f"-Y 'ip and not ip.dst == 255.255.255.255' 2>/dev/null"
+            )
+            for line in out.splitlines():
+                parts = line.split("\t")
+                dst_ip = parts[0].strip() if parts else ""
+                if not dst_ip or not _is_rfc1918(dst_ip):
+                    continue
+                subnet = _to_slash24(dst_ip)
+                if not subnet:
+                    continue
+                subnet_data[subnet]["packets"] += 1
+                if len(parts) > 1:
+                    proto = parts[1].strip()
+                    if proto:
+                        subnet_data[subnet]["protocols"].add(proto)
+
+    # Source 2: credential findings (dst IPs survive PCAP rotation)
+    if os.path.isfile(FINDINGS_FILE):
+        try:
+            with open(FINDINGS_FILE) as fh:
+                raw = json.load(fh)
+            findings = raw.get("findings", []) if isinstance(raw, dict) else raw
+            for finding in findings:
+                dst = finding.get("dst", "")
+                if not dst:
+                    continue
+                dst_ip = dst.split(":")[0]
+                if not _is_rfc1918(dst_ip):
+                    continue
+                subnet = _to_slash24(dst_ip)
+                if not subnet:
+                    continue
+                # Count each finding as one packet-equivalent; tag protocol
+                subnet_data[subnet]["packets"] += 1
+                proto = finding.get("protocol", "")
                 if proto:
-                    subnet_data[subnet]["protocols"].add(proto)
+                    subnet_data[subnet]["protocols"].add(f"{proto} [cred]")
+        except (json.JSONDecodeError, OSError, KeyError):
+            pass
+
+    if not subnet_data:
+        return []
 
     suggestions = []
     for subnet, data in sorted(
