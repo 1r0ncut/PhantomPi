@@ -11,7 +11,7 @@ import subprocess
 
 from flask import jsonify, request
 
-LIGOLO_BINARY  = "/opt/implant/tools/ligolo-agent"
+LIGOLO_BINARY  = "/usr/bin/ligolo-agent"
 SESSION_PREFIX = "ligolo-"
 DEFAULT_PORT   = 11601
 
