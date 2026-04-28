@@ -470,6 +470,23 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
             ui.run(f"chown -R {OC_USER}:{OC_USER} {oc_pkg}", check=False)
             ui.success(f"Plugin directory ownership fixed")
 
+    # ── Deploy shared scripts to ~/scripts/ ──────────────────────────
+    scripts_src = os.path.join(REPO_DIR, "openclaw", "scripts")
+    scripts_dst = os.path.join(OC_HOME, "scripts")
+    os.makedirs(scripts_dst, exist_ok=True)
+    if os.path.isdir(scripts_src):
+        ui.info(f"Deploying shared scripts to {scripts_dst} ...")
+        for f in os.listdir(scripts_src):
+            src_f = os.path.join(scripts_src, f)
+            dst_f = os.path.join(scripts_dst, f)
+            if os.path.isfile(src_f):
+                shutil.copy2(src_f, dst_f)
+                if f.endswith(".sh"):
+                    os.chmod(dst_f, 0o755)
+        ui.success("Shared scripts deployed")
+    else:
+        ui.warning(f"Shared scripts source not found at {scripts_src}")
+
     # ── Deploy skills to ~/skills/ ───────────────────────────────────
     skills_src = os.path.join(REPO_DIR, "openclaw", "skills")
     os.makedirs(SKILLS_DIR, exist_ok=True)

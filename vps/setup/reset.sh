@@ -52,10 +52,14 @@ rm -f /etc/systemd/system/openclaw-gateway.service
 systemctl daemon-reload 2>/dev/null || true
 success "OpenClaw gateway service removed"
 
-# ── 3. Remove OpenClaw skills ────────────────────────────────────────────
+# ── 3. Remove OpenClaw skills and shared scripts ─────────────────────────
 info "Removing /home/openclaw/skills/ ..."
 rm -rf /home/openclaw/skills
 success "Removed /home/openclaw/skills/"
+
+info "Removing /home/openclaw/scripts/ ..."
+rm -rf /home/openclaw/scripts
+success "Removed /home/openclaw/scripts/"
 
 # ── 4. Full: remove OpenClaw binary, config, and system user ────────────
 if [ "$FULL" = true ]; then

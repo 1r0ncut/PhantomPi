@@ -1,37 +1,59 @@
 from flask import jsonify
 import subprocess
 
+
 def run_cmd(cmd):
     try:
-        return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
+        return subprocess.check_output(
+            cmd, shell=True, text=True, stderr=subprocess.DEVNULL
+        ).strip()
     except Exception:
-        return "<error>"
+        return ""
+
 
 def register(app):
     @app.route("/status", methods=["GET"])
     def status():
         result = {}
 
-        # 1. Interfaces with IP and MAC
-        result['interfaces'] = run_cmd("ip -brief address")
+        # Interfaces: parse ip -brief address into structured list
+        ifaces = []
+        for line in run_cmd("ip -brief address").splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                ifaces.append({
+                    "name":      parts[0],
+                    "state":     parts[1],
+                    "addresses": parts[2:] if len(parts) > 2 else [],
+                })
+        result["interfaces"] = ifaces
 
-        # 2. Routes
-        result['routes'] = run_cmd("ip route")
+        # Routes: one entry per line
+        result["routes"] = [
+            l for l in run_cmd("ip route").splitlines() if l.strip()
+        ]
 
-        # 3. Uptime
-        result['uptime'] = run_cmd("uptime -p")
+        # Uptime
+        result["uptime"] = run_cmd("uptime -p")
 
-        # 4. Listening Ports
-        result['ports'] = run_cmd("ss -tuln | grep -i listen")
+        # Listening ports: one entry per line
+        result["ports"] = [
+            l for l in run_cmd("ss -tuln | grep -i listen").splitlines()
+            if l.strip()
+        ]
 
-        # 5. Custom services (define which ones matter)
-        services = ["wg-keepalive.timer", "hidden-hotspot.service", "bridge-sync.timer", "packet-sniffer.service", "power-monitor.timer", "cred-analyzer.timer"]
-        status_lines = []
-        for s in services:
-            state = run_cmd(f"systemctl is-active {s}")
-            if state != "active": state = "inactive"
-            emoji = "🟢" if state == "active" else "🔴"
-            status_lines.append(f"{emoji} `{s}`: {state}")
-        result['services'] = "\n".join(status_lines)
+        # Services: structured list, no emojis
+        services = [
+            "wg-keepalive.timer",
+            "bridge-sync.timer",
+            "packet-sniffer.service",
+            "cred-analyzer.timer",
+            "power-monitor.timer",
+            "hidden-hotspot.service",
+        ]
+        result["services"] = [
+            {"name": s, "active": run_cmd(f"systemctl is-active {s}") == "active"}
+            for s in services
+        ]
 
         return jsonify(result)

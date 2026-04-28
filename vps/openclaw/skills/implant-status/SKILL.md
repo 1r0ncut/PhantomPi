@@ -5,61 +5,64 @@ description: >
   uptime, listening ports, and service status. Replaces the old /alive and
   /status Discord slash commands. Triggers on: status, alive, health, implant,
   services, uptime, interfaces, routes, ports.
-metadata: {"openclaw":{"requires":{"bins":["curl"]},"os":["linux"]}}
+metadata: {"openclaw":{"requires":{"bins":["curl","nc"]},"os":["linux"]}}
 ---
 
 # Implant Status
 
 You report the operational status of PhantomPi implants for the operator.
 
-## Checking if an implant is alive
+## Querying implant status
 
 ```bash
-bash {baseDir}/scripts/check-status.sh alive [IMPLANT_IP]
+bash /home/openclaw/scripts/query-implant.sh /status [IMPLANT_IPS]
 ```
 
-The script sends a request to the implant's `/alive` endpoint.
-- If the implant is reachable, `/alive` returns HTTP 200 with an empty body.
-- If the implant is unreachable, the request times out with no response.
+Omit the IP argument for general queries — the script reads `$IMPLANT_IPS` and checks all implants automatically.
+Pass a specific IP for targeted queries.
 
-The script wraps the result as JSON: `{"implant":"...","status":"alive"|"dead","http_code":...}`.
+The script performs a TCP alive check on port 8443 before querying. Output is a JSON object keyed by implant IP:
 
-## Getting full system status
-
-```bash
-bash {baseDir}/scripts/check-status.sh status [IMPLANT_IP]
+```json
+{
+  "10.8.0.3": {"alive": true,  "data": {...}},
+  "10.8.0.4": {"alive": false, "data": null}
+}
 ```
-
-Returns JSON with: `interfaces`, `routes`, `uptime`, `ports`, `services`.
 
 ## Interpreting the output
 
-### Services
-Each service shows a status emoji:
-- Green circle = active and healthy
-- Red circle = inactive or failed. Flag to the operator.
+### Alive check
+- `alive: false` — implant is unreachable. Report as dead, do not proceed.
+- `alive: true` — implant responded; read `data` for full status.
 
-**Critical services to watch:**
+### Interfaces (`data.interfaces`)
+List of `{name, state, addresses}` objects.
+- `wg0` UP — WireGuard tunnel active (C2 connectivity)
+- `br0` UP — bridge active (inline interception mode)
+- `eth0` / `eth2` UP — company-side / target-side cables connected
+- `eth1` UP — LTE modem connected
+- `wlan0` UP — emergency hotspot active
+
+### Services (`data.services`)
+List of `{name, active}` objects. Flag any critical service where `active` is `false`:
+
 | Service | Purpose |
 |---------|---------|
-| `wg-keepalive.timer` | WireGuard tunnel monitor (reboots on failure) |
-| `bridge-sync.timer` | Ethernet bridge between company and target networks |
+| `wg-keepalive.timer` | WireGuard tunnel monitor |
+| `bridge-sync.timer` | Ethernet bridge lifecycle |
 | `packet-sniffer.service` | tcpdump packet capture |
-| `cred-analyzer.timer` | Credential analysis of stored PCAPs |
+| `cred-analyzer.timer` | Credential analysis of PCAPs |
 | `power-monitor.timer` | Raspberry Pi voltage/throttle monitor |
 | `hidden-hotspot.service` | Emergency WiFi access point |
 
-### Network
-- `br0` = bridge active (company <> target traffic flowing)
-- `wg0` = WireGuard tunnel up (VPS connectivity)
-- `eth0` = company-side interface
-- `eth2` = target-side interface
-- `eth1` = LTE modem
+### Uptime
+`data.uptime` — plain string from `uptime -p`.
 
 ## Reporting guidelines
 
-1. Lead with alive/dead status.
+1. Lead with alive/dead status for each implant.
 2. Summarise uptime and interface state in one line.
-3. Flag any inactive critical services.
-4. Only show full detail (routes, ports) if the operator asks for it.
-
+3. Flag any critical service where `active` is `false`.
+4. Add 🟢 / 🔴 emojis when formatting services for Discord.
+5. Only show full detail (routes, ports) if the operator asks for it.

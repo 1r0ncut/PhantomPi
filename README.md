@@ -276,6 +276,8 @@ flowchart TB
 │   ├── AGENTS.md           # Hard rules: output format, multi-implant handling
 │   ├── SOUL.md             # PhantomPi context and inner workings
 │   └── IDENTITY.md         # Bot persona (PhantomClaw)
+├── scripts/
+│   └── query-implant.sh    # Universal implant API query script
 └── skills/
     ├── implant-status/     # Natural-language status queries
     ├── cred-sniffer/       # Credential analysis & reporting

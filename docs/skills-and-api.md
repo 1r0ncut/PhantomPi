@@ -32,8 +32,9 @@ When the operator asks something in Discord, OpenClaw selects the matching skill
 |------|---------|
 | `/home/openclaw/.openclaw/openclaw.json` | OpenClaw runtime config (agents, hooks, channels) |
 | `/home/openclaw/.openclaw/.env` | Secrets (Discord token, API keys) |
-| `/home/openclaw/skills/<name>/SKILL.md` | Skill definition: triggers, instructions, Discord formatting |
-| `/home/openclaw/skills/<name>/scripts/` | Shell scripts the skill can invoke |
+| `/home/openclaw/scripts/query-implant.sh` | Universal implant query script (used by all skills) |
+| `/home/openclaw/skills/<name>/SKILL.md` | Skill definition: triggers, instructions, output format |
+| `/home/openclaw/skills/<name>/scripts/` | Optional skill-specific scripts |
 
 ### Implant side
 
@@ -149,8 +150,7 @@ Before writing a new skill, check whether the implant API already exposes the da
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /alive` | HTTP 200 (empty body) if reachable |
-| `GET /status` | Interface state, uptime, services, ports |
+| `GET /status` | Interface state, uptime, services, ports (clean JSON, no emojis) |
 | `GET /captured-creds` | All extracted credentials and hashes |
 
 If the data you need is not available, add a new route.

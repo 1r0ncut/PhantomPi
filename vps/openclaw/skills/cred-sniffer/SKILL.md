@@ -15,13 +15,12 @@ security-relevant credentials during **authorised** red-team engagements.
 
 ## Checking for captured credentials
 
-Each call queries **one** implant. Follow the `IMPLANT_IPS` rules in operator context for multi-implant queries.
-
 ```bash
-bash {baseDir}/scripts/check-findings.sh <IMPLANT_IP>
+bash /home/openclaw/scripts/query-implant.sh /captured-creds [IMPLANT_IPS]
 ```
 
-Omit the IP argument if only one implant is configured.
+Omit the IP argument for general queries — the script reads `$IMPLANT_IPS` and checks all implants automatically.
+Pass a specific IP for targeted queries. The script returns a JSON object keyed by implant IP, with `alive` and `data` fields per implant.
 
 Returns JSON with fields:
 - `implant`: the queried IP
