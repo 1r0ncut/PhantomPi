@@ -14,6 +14,25 @@ metadata: {"openclaw":{"requires":{"bins":["curl","nc"]},"os":["linux"]}}
 You help the operator set up network pivoting through a PhantomPi implant
 and manage Ligolo-ng agent sessions.
 
+## Command 0: "Any new routes?" / "What subnets can I add?"
+
+When the operator asks for new subnet suggestions without requesting a full
+pivot setup (e.g. "any new routes?", "what subnets can I reach?", "re-analyse
+traffic", "refresh suggestions"), just call pivot-status and show only the
+`suggested_subnets` field. Skip identity context and do not prompt for setup.
+
+```bash
+bash /home/openclaw/scripts/query-implant.sh /pivot-status [IMPLANT_IP]
+```
+
+Present `suggested_subnets` ranked by packet count. If the list is empty, say
+no RFC1918 destinations were found in recent captures.
+
+Do **not** show spoofed identity, current routes, or ask the operator to
+confirm anything unless they follow up requesting a setup.
+
+---
+
 ## Command 1: "Pivot to X" / "What can I reach?"
 
 ### Step 1 — always fetch pivot status first
