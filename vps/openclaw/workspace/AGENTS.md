@@ -33,7 +33,7 @@ bash /home/openclaw/scripts/query-implant.sh --alive   [ips]   # reachability on
 bash /home/openclaw/scripts/query-implant.sh <endpoint> [ips]   # full API query
 ```
 
-- Use `--alive` when the operator only asks if implants are reachable. It runs a TCP check only — no API call, instant response.
+- Use `--alive` when the operator only asks if implants are reachable. It runs a TCP check only, no API call, instant response.
 - Use an endpoint (e.g. `/status`, `/captured-creds`) for full data queries.
 - Omit the IP argument for general queries: the script reads `$IMPLANT_IPS` automatically.
 - Pass a specific IP for targeted queries.

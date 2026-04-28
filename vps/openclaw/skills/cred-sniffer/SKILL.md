@@ -19,7 +19,7 @@ security-relevant credentials during **authorised** red-team engagements.
 bash /home/openclaw/scripts/query-implant.sh /captured-creds [IMPLANT_IPS]
 ```
 
-Omit the IP argument for general queries — the script reads `$IMPLANT_IPS` and checks all implants automatically.
+Omit the IP argument for general queries; the script reads `$IMPLANT_IPS` and checks all implants automatically.
 Pass a specific IP for targeted queries. The script returns a JSON object keyed by implant IP, with `alive` and `data` fields per implant.
 
 Returns JSON with fields:

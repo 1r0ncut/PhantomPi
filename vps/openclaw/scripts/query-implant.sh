@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# query-implant.sh — Universal PhantomPi implant API query script
+# query-implant.sh: Universal PhantomPi implant API query script
 #
 # Usage:
 #   bash query-implant.sh --alive   [ip1,ip2,...]          # TCP reachability only
@@ -7,7 +7,7 @@
 #   bash query-implant.sh --post <endpoint> <json> [ip]     # POST, single implant
 #
 # If no IPs are given, reads from $IMPLANT_IPS (comma-separated).
-# Alive check: TCP connect to port 8443 — no dedicated /alive endpoint.
+# Alive check: TCP connect to port 8443, no dedicated /alive endpoint.
 #
 # GET output:  JSON object keyed by implant IP
 #   {"10.8.0.3": {"alive": true, "data": {...}}, ...}
@@ -20,7 +20,7 @@ PORT="${PORT:-8443}"
 CONNECT_TIMEOUT=5
 QUERY_TIMEOUT=10
 
-# ── POST mode — single implant ─────────────────────────────────────────────
+# POST mode: single implant
 if [ "$MODE" = "--post" ]; then
     ENDPOINT="${2:?--post requires: <endpoint> <json> [ip]}"
     JSON_BODY="${3:?--post requires: <endpoint> <json> [ip]}"
@@ -49,7 +49,7 @@ if [ "$MODE" = "--post" ]; then
     exit 0
 fi
 
-# ── GET / --alive mode — multi-implant ────────────────────────────────────
+# GET / --alive mode: multi-implant
 IPS_RAW="${2:-${IMPLANT_IPS:-}}"
 
 if [ -z "$IPS_RAW" ]; then

@@ -24,7 +24,7 @@ bash /home/openclaw/scripts/query-implant.sh --alive [IMPLANT_IPS]
 bash /home/openclaw/scripts/query-implant.sh /status [IMPLANT_IPS]
 ```
 
-Omit the IP argument for general queries — the script reads `$IMPLANT_IPS` and checks all implants automatically.
+Omit the IP argument for general queries; the script reads `$IMPLANT_IPS` and checks all implants automatically.
 Pass a specific IP for targeted queries.
 
 The script performs a TCP alive check on port 8443 before querying. Output is a JSON object keyed by implant IP:
@@ -39,16 +39,16 @@ The script performs a TCP alive check on port 8443 before querying. Output is a 
 ## Interpreting the output
 
 ### Alive check
-- `alive: false` — implant is unreachable. Report as dead, do not proceed.
-- `alive: true` — implant responded; read `data` for full status.
+- `alive: false`: implant is unreachable. Report as dead, do not proceed.
+- `alive: true`: implant responded; read `data` for full status.
 
 ### Interfaces (`data.interfaces`)
 List of `{name, state, addresses}` objects.
-- `wg0` UP — WireGuard tunnel active (C2 connectivity)
-- `br0` UP — bridge active (inline interception mode)
-- `eth0` / `eth2` UP — company-side / target-side cables connected
-- `eth1` UP — LTE modem connected
-- `wlan0` UP — emergency hotspot active
+- `wg0` UP: WireGuard tunnel active (C2 connectivity)
+- `br0` UP: bridge active (inline interception mode)
+- `eth0` / `eth2` UP: company-side / target-side cables connected
+- `eth1` UP: LTE modem connected
+- `wlan0` UP: emergency hotspot active
 
 ### Services (`data.services`)
 List of `{name, active}` objects. Flag any critical service where `active` is `false`:
@@ -63,7 +63,7 @@ List of `{name, active}` objects. Flag any critical service where `active` is `f
 | `hidden-hotspot.service` | Emergency WiFi access point |
 
 ### Uptime
-`data.uptime` — plain string from `uptime -p`.
+`data.uptime`: plain string from `uptime -p`.
 
 ## Reporting guidelines
 

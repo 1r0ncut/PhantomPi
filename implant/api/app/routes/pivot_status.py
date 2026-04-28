@@ -1,5 +1,5 @@
 """
-Pivot status endpoint — returns pivot readiness, spoofed identity from the
+Pivot status endpoint: returns pivot readiness, spoofed identity from the
 spoof-target log, current routes on veth1, and internal subnet suggestions
 derived from captured traffic PCAPs.
 """

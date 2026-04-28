@@ -97,12 +97,12 @@ bash /home/openclaw/scripts/query-implant.sh --post /my-endpoint '{"key":"value"
 Explain what the script returns and how to present it.
 ```
 
-> **Note:** Discord formatting rules (bold, inline code, fenced blocks — no tables, no headings, no HTML) are defined globally in `AGENTS.md` and apply to every skill. Do not repeat them here.
+> **Note:** Discord formatting rules (bold, inline code, fenced blocks, no tables, no headings, no HTML) are defined globally in `AGENTS.md` and apply to every skill. Do not repeat them here.
 
 ### 3. Write the script (optional)
 
 Most skills call the implant API directly from `SKILL.md` using the universal
-query script — no per-skill script is needed. Only add a script under
+query script; no per-skill script is needed. Only add a script under
 `skills/<name>/scripts/` when you need complex pre/post-processing that cannot
 be done inline.
 

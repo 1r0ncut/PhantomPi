@@ -35,7 +35,7 @@ confirm anything unless they follow up requesting a setup.
 
 ## Command 1: "Pivot to X" / "What can I reach?"
 
-### Step 1 — always fetch pivot status first
+### Step 1: always fetch pivot status first
 
 ```bash
 bash /home/openclaw/scripts/query-implant.sh /pivot-status [IMPLANT_IP]
@@ -59,13 +59,13 @@ Present `suggested_subnets` as a prioritised list. Each entry has:
 
 Example presentation:
 > Based on captured traffic, here are reachable internal subnets:
-> - `192.168.10.0/24` — 847 pkts (SMB, Kerberos) — likely DC/file share traffic
-> - `10.10.5.0/24` — 312 pkts (LDAP, RDP)
-> - `172.16.0.0/24` — 44 pkts (HTTP)
+> - `192.168.10.0/24`: 847 pkts (SMB, Kerberos), likely DC/file share traffic
+> - `10.10.5.0/24`: 312 pkts (LDAP, RDP)
+> - `172.16.0.0/24`: 44 pkts (HTTP)
 >
 > Which ones do you want to route through the pivot?
 
-### Step 2 — set up routes (when operator confirms subnets)
+### Step 2: set up routes (when operator confirms subnets)
 
 ```bash
 bash /home/openclaw/scripts/query-implant.sh --post /pivot-setup \
@@ -156,7 +156,7 @@ netsh interface ip set dns "ligolo0" static 192.168.1.10
 ```
 
 Always fill in the real subnet values and DNS IP from the pivot-status response.
-Never output placeholder routes — generate one line per configured subnet.
+Never output placeholder routes; generate one line per configured subnet.
 
 ### Kill a specific session
 
@@ -177,7 +177,7 @@ bash /home/openclaw/scripts/query-implant.sh --post /ligolo-kill \
 ## Targeting implants
 
 - For general queries omit the IP: the script reads `$IMPLANT_IPS` automatically.
-- For POST operations (setup, start, kill) always pass the specific implant IP —
+- For POST operations (setup, start, kill) always pass the specific implant IP;
   write operations are never broadcast to all implants.
 - If the operator does not specify which implant, ask before proceeding with
   any write operation when multiple implants are configured.
@@ -189,7 +189,7 @@ bash /home/openclaw/scripts/query-implant.sh --post /ligolo-kill \
 3. Do not set up routes without the operator explicitly confirming the targets.
 4. For Ligolo sessions: show session name, proxy IP, and whether the agent is still running.
 5. **After any action that affects the operator's machine** (route setup, Ligolo start),
-   always output a complete copy-paste block of commands for their OS — Linux and Windows
+   always output a complete copy-paste block of commands for their OS (Linux and Windows)
    unless the operator's OS is already known. Fill in real values (subnets, IPs, DNS).
    Never use placeholders like `<subnet>` in the final output block.
 6. If the operator's OS is unknown, output both Linux and Windows blocks.

@@ -1,9 +1,9 @@
 """
-Credential findings endpoint — returns all captured credentials,
+Credential findings endpoint: returns all captured credentials,
 hashes, and tokens from PCAP analysis.
 
 Findings are written by cred-analyzer.py (runs every 60 s via systemd
-timer).  This endpoint simply reads the latest findings file — it does
+timer).  This endpoint simply reads the latest findings file; it does
 NOT invoke the analyzer synchronously, because scapy + PCAP processing
 can exceed gunicorn's worker timeout and crash the API.
 """

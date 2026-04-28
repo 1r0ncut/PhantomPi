@@ -1,5 +1,5 @@
 """
-Pivot route management — add or remove routes through veth1.
+Pivot route management: add or remove routes through veth1.
 
 POST /pivot-setup  {"subnets": ["192.168.10.0/24", "10.10.5.0/24"]}
 POST /pivot-reset  {"subnets": [...]}   # omit or pass [] to reset all
@@ -74,7 +74,7 @@ def register(app):
         gateway = _get_gateway()
         if not gateway:
             return jsonify({
-                "error": "gateway not found in spoof-target log — run spoof-target.sh with --gateway first"
+                "error": "gateway not found in spoof-target log; run spoof-target.sh with --gateway first"
             }), 409
 
         existing = _existing_routes()
