@@ -25,17 +25,6 @@ _RFC1918 = [
     (0xC0A80000, 0xFFFF0000),  # 192.168.0.0/16
 ]
 
-# Destination-port hints shown in suggestions
-_PORT_HINTS = {
-    445: "SMB", 139: "SMB", 135: "RPC",
-    88:  "Kerberos", 389: "LDAP", 636: "LDAPS", 3268: "GC",
-    53:  "DNS",
-    80:  "HTTP", 443: "HTTPS", 8080: "HTTP-alt", 8443: "HTTPS-alt",
-    3389: "RDP", 22: "SSH", 23: "Telnet", 21: "FTP",
-    25: "SMTP", 110: "POP3", 143: "IMAP",
-    1433: "MSSQL", 3306: "MySQL", 5432: "PostgreSQL",
-    6379: "Redis", 27017: "MongoDB",
-}
 
 
 def _run(cmd):
@@ -133,12 +122,12 @@ def _suggest_subnets():
     if not pcaps:
         return []
 
-    subnet_data = defaultdict(lambda: {"packets": 0, "ports": set()})
+    subnet_data = defaultdict(lambda: {"packets": 0, "protocols": set()})
 
     for pcap in pcaps:
         out = _run(
             f"tshark -r {pcap} -c {PACKET_CAP} -T fields "
-            f"-e ip.dst -e tcp.dstport -e udp.dstport "
+            f"-e ip.dst -e _ws.col.Protocol "
             f"-Y 'ip and not ip.dst == 255.255.255.255' 2>/dev/null"
         )
         for line in out.splitlines():
@@ -150,19 +139,16 @@ def _suggest_subnets():
             if not subnet:
                 continue
             subnet_data[subnet]["packets"] += 1
-            for raw in parts[1:]:
-                try:
-                    subnet_data[subnet]["ports"].add(int(raw.strip()))
-                except (ValueError, TypeError):
-                    pass
+            if len(parts) > 1:
+                proto = parts[1].strip()
+                if proto:
+                    subnet_data[subnet]["protocols"].add(proto)
 
     suggestions = []
     for subnet, data in sorted(
         subnet_data.items(), key=lambda x: x[1]["packets"], reverse=True
     ):
-        hints = sorted({
-            _PORT_HINTS[p] for p in data["ports"] if p in _PORT_HINTS
-        })
+        hints = sorted(data["protocols"])
         suggestions.append({
             "subnet":  subnet,
             "packets": data["packets"],
