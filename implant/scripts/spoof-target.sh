@@ -78,7 +78,7 @@ capture_traffic() {
   local capture_filter="arp or (ether proto 0x88cc) or (udp and (port 53 or port 67 or port 68 or port 137 or port 5353 or port 5355))"
 
   # If the trigger script exists and hostname detection has been requested, run it in the background to elicit a response
-  if $DO_HOSTNAME && [ -z "$SPOOFED_HOSTNAME" ] && [ -x "/opt/implant/scripts/trigger-lldp.py" ]; then
+  if $DO_HOSTNAME && [ -z "$SPOOFED_HOSTNAME" ] && [ -f "/opt/implant/scripts/trigger-lldp.py" ]; then
     echo "[*] Launching LLDP trigger script in background..."
     sudo python3 /opt/implant/scripts/trigger-lldp.py &
   fi
