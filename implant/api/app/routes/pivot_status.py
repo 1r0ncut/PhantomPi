@@ -120,7 +120,7 @@ def _suggest_subnets():
             all_files = [
                 os.path.join(PCAP_DIR, f)
                 for f in os.listdir(PCAP_DIR)
-                if f.endswith(".pcap")
+                if re.search(r'\.pcap\d*$', f)
             ]
             pcaps = sorted(all_files, key=os.path.getmtime, reverse=True)[:PCAP_LIMIT]
         except OSError:
