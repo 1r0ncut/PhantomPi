@@ -154,7 +154,7 @@ load_pcap_offline() {
   fi
 
   local packets_captured
-  packets_captured=$(sudo capinfos -c "$CAPTURE_FILE" | awk '{print $NF}')
+  packets_captured=$(sudo capinfos -c "$CAPTURE_FILE" | awk '/Number of packets/{sub(/.*packets:[[:space:]]*/,""); print}')
   echo "[+] Loaded ${packets_captured} packets from ${count} offline PCAP(s)."
   debug_log "Merged offline PCAP: ${CAPTURE_FILE}"
 
@@ -170,7 +170,8 @@ load_pcap_offline() {
 ##
 extract_all_fields() {
   echo "[*] Extracting fields (single pass)..."
-  sudo tshark -r "$CAPTURE_FILE" \
+  local tshark_stderr
+  tshark_stderr=$(sudo tshark -r "$CAPTURE_FILE" \
     -Y "arp or lldp or (udp.dstport == 53 and not ip.dst == 224.0.0.251 and not ip.dst == 224.0.0.252)" \
     -T fields \
     -e frame.protocols \
@@ -182,8 +183,18 @@ extract_all_fields() {
     -e lldp.chassis.id.local \
     -e ip.dst \
     -E separator="|" \
-    2>/dev/null > "$EXTRACT_FILE"
-  debug_log "Extracted $(wc -l < "$EXTRACT_FILE") relevant packets to ${EXTRACT_FILE}"
+    2>&1 1>"$EXTRACT_FILE")
+  debug_log "tshark stderr: ${tshark_stderr:-none}"
+
+  local line_count
+  line_count=$(wc -l < "$EXTRACT_FILE")
+  if [ "$line_count" -eq 0 ]; then
+    echo "[!] Single-pass extraction yielded no records." >&2
+    echo "[!] The merged PCAP may be corrupt, in an unsupported format, or the tshark filter matched nothing." >&2
+    echo "[!] Run with --debug for more detail, or inspect: ${CAPTURE_FILE}" >&2
+    exit 1
+  fi
+  echo "[+] Extracted ${line_count} relevant records."
 }
 
 ##
