@@ -93,8 +93,8 @@
 |------------|-------------|
 | **Transparent Bridging** | Layer 2 bridge with `group_fwd_mask=8` for 802.1X EAPOL passthrough |
 | **Identity Spoofing** | Auto-detection of target IP/MAC via ARP, hostname via LLDP, gateway and DNS |
-| **Out-of-Band Control** | 4G/LTE modem (RNDIS) + WireGuard VPN + Discord bot management |
-| **Traffic Interception** | Continuous packet capture with rolling PCAP storage + credential extraction with Discord alerts |
+| **Out-of-Band Control** | 4G/LTE modem (RNDIS) + WireGuard VPN + OpenClaw AI gateway |
+| **Traffic Interception** | Continuous packet capture with rolling PCAP storage + credential extraction with webhook push alerts |
 | **Resilience** | Hardware watchdog, WireGuard auto-reconnect, hidden WiFi AP fallback |
 
 ## Hardware
