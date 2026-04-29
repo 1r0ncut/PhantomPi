@@ -130,7 +130,7 @@ load_pcap_offline() {
   echo "[*] Loading last ${OFFLINE_PCAP_COUNT} PCAP(s) from ${PCAP_DIR}..."
 
   local pcap_list
-  pcap_list=$(find "$PCAP_DIR" -maxdepth 1 \( -name "*.pcap" -o -name "*.pcapng" \) \
+  pcap_list=$(find "$PCAP_DIR" -maxdepth 1 -name "*.pcap*" \
     -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n "$OFFLINE_PCAP_COUNT" | awk '{print $2}')
 
   if [ -z "$pcap_list" ]; then
