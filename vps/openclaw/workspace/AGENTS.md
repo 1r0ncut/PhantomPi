@@ -23,3 +23,5 @@ bash /home/openclaw/scripts/query-implant.sh --post <endpoint> <json> [ip]  # PO
 ```
 
 Omit IP to use `$IMPLANT_IPS` automatically. Output is keyed by implant IP: `{"10.8.0.3": {"alive": true, "data": {...}}, ...}`
+
+**Never invent or guess API endpoint names.** Only use endpoints explicitly listed in the active skill. If unsure, re-read the skill before acting.

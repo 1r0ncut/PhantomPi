@@ -35,6 +35,8 @@ If `pivot_ready` is `true`: show spoofed identity (`ip`, `hostname`, `gateway`, 
 
 ### Step 2: set up routes (after operator confirms)
 
+The only endpoint for adding routes is `/pivot-setup`. Do not invent alternatives.
+
 ```bash
 bash /home/openclaw/scripts/query-implant.sh --post /pivot-setup \
   '{"subnets":["192.168.10.0/24","10.10.5.0/24"]}' [IMPLANT_IP]
