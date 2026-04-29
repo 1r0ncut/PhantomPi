@@ -1,6 +1,9 @@
 #!/bin/bash
 
 # --- Configuration ---
+# Source shared config to inherit PCAP_DIR and other paths if available
+[ -f /opt/implant/config.env ] && source /opt/implant/config.env
+
 VETH_IN="veth0"
 VETH_OUT="veth1"
 BRIDGE="br0"
@@ -8,6 +11,9 @@ LISTEN_IFACE="eth2"
 LOG_DIR="/opt/implant/logs/spoof-target"
 LOG_FILE="${LOG_DIR}/spoof-target.log"
 SUBNETS_FILE="/opt/implant/logs/traffic-analyzer/subnet-suggestions.json"
+PCAP_DIR="${PCAP_DIR:-/opt/implant/logs/packet-sniffer}"
+OFFLINE_PCAP_COUNT=2
+LLDP_WAIT=5 # Seconds to wait after triggering LLDP before reading offline PCAPs
 
 # --- State Variables ---
 SPOOFED_IP=""
@@ -25,8 +31,10 @@ DO_DNS=false
 FORCE_CAPTURE=false
 DEBUG=false
 LAST_SPOOFED=false
+LIVE_CAPTURE=false
 DETECT_NET_CONFIG=false
-TIMEOUT=30 # Default capture timeout
+TIMEOUT=30           # Default capture timeout (--live only)
+TIMEOUT_EXPLICIT=false
 
 # --- Functions ---
 
@@ -43,7 +51,12 @@ debug_log() {
 # Displays usage information and exits.
 ##
 usage() {
-  echo "Usage: $0 [detection options] [set options]"
+  echo "Usage: $0 [detection options] [set options] [--live]"
+  echo ""
+  echo "Capture Mode:"
+  echo "  (default)            Offline: analyse the last ${OFFLINE_PCAP_COUNT} PCAPs from ${PCAP_DIR}."
+  echo "                       All detection options are enabled automatically unless narrowed."
+  echo "  --live               Live: capture traffic on ${LISTEN_IFACE} in real time."
   echo ""
   echo "Detection Options:"
   echo "  --ip-mac             Detect the most active IP and MAC address."
@@ -57,9 +70,11 @@ usage() {
   echo "  --set-mac <mac>      Manually set the target MAC address."
   echo "  --set-hostname <val> Manually set the target hostname."
   echo ""
+  echo "Live-only Options (require --live):"
+  echo "  --timeout <sec>      Set the capture duration (default: ${TIMEOUT}s)."
+  echo "  --force              Repeat capture until all requested information is found."
+  echo ""
   echo "Control Options:"
-  echo "  --timeout <sec>      Set the network capture duration (default: ${TIMEOUT}s)."
-  echo "  --force              Capture in loops until all requested information is found."
   echo "  --debug              Enable verbose debugging output."
   echo "  --help               Display this help message."
   echo ""
@@ -97,6 +112,49 @@ capture_traffic() {
   packets_captured=$(sudo capinfos -c "$CAPTURE_FILE" | awk '{print $NF}')
   echo "[+] Capture finished. ${packets_captured} relevant packets saved."
   debug_log "Capture saved to ${CAPTURE_FILE}"
+}
+
+##
+# Loads the last OFFLINE_PCAP_COUNT PCAPs from PCAP_DIR and merges them into
+# a single temporary CAPTURE_FILE for analysis by the existing detect_* functions.
+##
+load_pcap_offline() {
+  # If hostname detection is requested, trigger LLDP and wait for packets to
+  # land in the packet-sniffer PCAPs before reading them.
+  if $DO_HOSTNAME && [ -z "$SPOOFED_HOSTNAME" ] && [ -f "/opt/implant/scripts/trigger-lldp.py" ]; then
+    echo "[*] Launching LLDP trigger (waiting ${LLDP_WAIT}s for packets to land in PCAPs)..."
+    sudo python3 /opt/implant/scripts/trigger-lldp.py &
+    sleep "$LLDP_WAIT"
+  fi
+
+  echo "[*] Loading last ${OFFLINE_PCAP_COUNT} PCAP(s) from ${PCAP_DIR}..."
+
+  local pcap_list
+  pcap_list=$(find "$PCAP_DIR" -maxdepth 1 \( -name "*.pcap" -o -name "*.pcapng" \) \
+    -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n "$OFFLINE_PCAP_COUNT" | awk '{print $2}')
+
+  if [ -z "$pcap_list" ]; then
+    echo "[!] No PCAP files found in ${PCAP_DIR}." >&2
+    exit 1
+  fi
+
+  CAPTURE_FILE=$(sudo mktemp /tmp/spoof-target-offline-XXXXXX.pcap)
+  trap 'sudo rm -f "$CAPTURE_FILE"' EXIT
+
+  local count
+  count=$(echo "$pcap_list" | wc -l)
+
+  if [ "$count" -eq 1 ]; then
+    sudo cp "$pcap_list" "$CAPTURE_FILE"
+  else
+    # mergecap combines multiple PCAPs into one chronological stream
+    sudo mergecap -w "$CAPTURE_FILE" $pcap_list
+  fi
+
+  local packets_captured
+  packets_captured=$(sudo capinfos -c "$CAPTURE_FILE" | awk '{print $NF}')
+  echo "[+] Loaded ${packets_captured} packets from ${count} offline PCAP(s)."
+  debug_log "Merged offline PCAP: ${CAPTURE_FILE}"
 }
 
 ##
@@ -327,7 +385,7 @@ display_summary_and_confirm() {
   echo "  Spoofed IP:         ${SPOOFED_IP:-Not found}"
   echo "  Spoofed MAC:        ${SPOOFED_MAC:-Not found}"
   echo "  Spoofed Hostname:   ${SPOOFED_HOSTNAME:-Not set}"
-  if $DETECT_NET_CONFIG; then
+  if $DO_GATEWAY || $DO_DNS; then
     echo "  Detected Gateway:   ${GATEWAY_IP:-Not found}"
     echo "  Detected DNS:       ${DNS_SERVER:-Not found}"
   fi
@@ -493,7 +551,8 @@ while [ "$#" -gt 0 ]; do
         --set-mac) SPOOFED_MAC="$2"; shift 2;;
         --set-hostname) SPOOFED_HOSTNAME="$2"; shift 2;;
 
-        --timeout) TIMEOUT="$2"; shift 2;;
+        --live) LIVE_CAPTURE=true; shift;;
+        --timeout) TIMEOUT="$2"; TIMEOUT_EXPLICIT=true; shift 2;;
         --force) FORCE_CAPTURE=true; shift;;
         --last-spoofed) LAST_SPOOFED=true; shift;;
         --clean) cleanup;;
@@ -503,9 +562,24 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-# Check if at least one detection or set option was chosen for core info
-# (skipped when --last-spoofed is used; identity is loaded from log instead)
+# Offline mode requires mergecap (checked here after args are parsed)
+if ! $LIVE_CAPTURE && ! $LAST_SPOOFED; then
+  if ! command -v mergecap &> /dev/null; then echo "[!] Tool 'mergecap' not found (required for offline mode)." >&2; exit 1; fi
+fi
+
+# Validate options and resolve defaults
 if ! $LAST_SPOOFED; then
+  # --timeout and --force are live-only
+  if ! $LIVE_CAPTURE; then
+    if $TIMEOUT_EXPLICIT; then echo "[!] --timeout requires --live." >&2; exit 1; fi
+    if $FORCE_CAPTURE;    then echo "[!] --force requires --live." >&2;   exit 1; fi
+    # Default to full detection when no flags specified in offline mode
+    if ! $DO_IP_MAC && ! $DO_HOSTNAME && ! $DO_GATEWAY && ! $DO_DNS && \
+       [ -z "$SPOOFED_IP" ] && [ -z "$SPOOFED_MAC" ]; then
+      DO_IP_MAC=true; DO_HOSTNAME=true; DO_GATEWAY=true; DO_DNS=true
+    fi
+  fi
+
   if [ -z "$SPOOFED_IP" ] && [ -z "$SPOOFED_MAC" ] && ! $DO_IP_MAC; then
     echo "[!] Error: You must either detect (--ip-mac) or provide (--set-ip/--set-mac) the target's identity." >&2
     usage
@@ -514,12 +588,16 @@ fi
 
 # --- Execution Flow ---
 run_detection_cycle() {
-    # Only capture if there is something left to detect
+    # Only load/capture if there is something left to detect
     if ( $DO_IP_MAC && ([ -z "$SPOOFED_IP" ] || [ -z "$SPOOFED_MAC" ]) ) || \
        ( $DO_HOSTNAME && [ -z "$SPOOFED_HOSTNAME" ] ) || \
        ( $DO_GATEWAY && [ -z "$GATEWAY_IP" ] ) || \
        ( $DO_DNS && [ -z "$DNS_SERVER" ] ); then
-        capture_traffic
+        if $LIVE_CAPTURE; then
+            capture_traffic
+        else
+            load_pcap_offline
+        fi
         if $DO_IP_MAC; then detect_ip_mac; fi
         if $DO_HOSTNAME; then detect_hostname; fi
         if $DO_GATEWAY; then detect_gateway; fi
