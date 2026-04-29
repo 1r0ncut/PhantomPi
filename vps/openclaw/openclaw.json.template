@@ -33,8 +33,8 @@
                 "enabled": true,
                 "allowFrom": [__DM_USERS__]
             },
-            "historyLimit": 30,
-            "streaming": "off",
+            "historyLimit": 15,
+            "streaming": "on",
             "textChunkLimit": 2000
         }
     },
