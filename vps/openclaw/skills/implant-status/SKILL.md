@@ -2,7 +2,7 @@
 name: implant-status
 description: >
   Check PhantomPi implant health: connectivity, interfaces, services, uptime, ports.
-  Triggers on: status, alive, health, implant, services, uptime, interfaces, routes, ports.
+  Triggers on: status, alive, health, implant, services, uptime, interfaces, ports.
 metadata: {"openclaw":{"requires":{"bins":["curl","nc"]},"os":["linux"]}}
 ---
 
