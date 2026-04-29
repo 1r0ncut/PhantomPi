@@ -424,10 +424,10 @@ try:
     if not items:
         sys.exit(1)
     for i, s in enumerate(items, 1):
-        protocols = ', '.join(s.get('protocols', []))
-        line = f\"{i}. {s['subnet']}  ({s['pkt_count']} pkts)\"
-        if protocols:
-            line += f'  [{protocols}]'
+        hint = s.get('hint', '')
+        line = f\"{i}. {s['subnet']}  ({s['packets']} pkts)\"
+        if hint:
+            line += f'  [{hint}]'
         print(line)
 except Exception as e:
     print(f'error: {e}', file=sys.stderr)
