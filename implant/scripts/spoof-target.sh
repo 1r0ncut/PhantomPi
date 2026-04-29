@@ -23,6 +23,7 @@ GATEWAY_IP=""
 DNS_SERVER=""
 CAPTURE_FILE=""
 EXTRACT_FILE=""
+LLDP_CAPTURE_FILE=""
 
 # --- Option Flags ---
 DO_IP_MAC=false
@@ -120,14 +121,6 @@ capture_traffic() {
 # a single temporary CAPTURE_FILE for analysis by the existing detect_* functions.
 ##
 load_pcap_offline() {
-  # If hostname detection is requested, trigger LLDP and wait for packets to
-  # land in the packet-sniffer PCAPs before reading them.
-  if $DO_HOSTNAME && [ -z "$SPOOFED_HOSTNAME" ] && [ -f "/opt/implant/scripts/trigger-lldp.py" ]; then
-    echo "[*] Launching LLDP trigger (waiting ${LLDP_WAIT}s for packets to land in PCAPs)..."
-    sudo python3 /opt/implant/scripts/trigger-lldp.py &
-    sleep "$LLDP_WAIT"
-  fi
-
   echo "[*] Loading last ${OFFLINE_PCAP_COUNT} PCAP(s) from ${PCAP_DIR}..."
 
   local pcap_list
@@ -141,7 +134,7 @@ load_pcap_offline() {
 
   CAPTURE_FILE=$(sudo mktemp /tmp/spoof-target-offline-XXXXXX.pcap)
   EXTRACT_FILE=$(mktemp /tmp/spoof-target-fields-XXXXXX.tsv)
-  trap 'sudo rm -f "$CAPTURE_FILE"; rm -f "$EXTRACT_FILE"' EXIT
+  trap 'sudo rm -f "$CAPTURE_FILE" "$LLDP_CAPTURE_FILE"; rm -f "$EXTRACT_FILE"' EXIT
 
   local count
   count=$(echo "$pcap_list" | wc -l)
@@ -162,24 +155,42 @@ load_pcap_offline() {
 }
 
 ##
+# Short live LLDP capture on LISTEN_IFACE, called in offline mode after
+# SPOOFED_MAC is known. Triggers the LLDP script and captures only LLDP frames
+# for LLDP_WAIT seconds into a tiny LLDP_CAPTURE_FILE for detect_hostname().
+##
+capture_lldp_live() {
+  if [ ! -f "/opt/implant/scripts/trigger-lldp.py" ]; then
+    debug_log "trigger-lldp.py not found; skipping live LLDP capture."
+    return
+  fi
+
+  LLDP_CAPTURE_FILE=$(sudo mktemp /tmp/spoof-target-lldp-XXXXXX.pcap)
+  echo "[*] Capturing live LLDP response for ${LLDP_WAIT}s..."
+  sudo python3 /opt/implant/scripts/trigger-lldp.py &
+  sudo tshark -q -i "${LISTEN_IFACE}" -f "ether proto 0x88cc" \
+    -w "$LLDP_CAPTURE_FILE" -a duration:"${LLDP_WAIT}" 2>/dev/null
+  debug_log "LLDP capture: ${LLDP_CAPTURE_FILE}"
+}
+
+##
 # Single tshark pass over CAPTURE_FILE extracting all fields needed by every
 # detect_* function. Result is saved to EXTRACT_FILE as pipe-delimited text:
-# frame.protocols | eth.src | arp.opcode | arp.src.proto_ipv4 | arp.dst.proto_ipv4
-#                | lldp.tlv.system.name | ip.dst
+# frame.protocols | eth.src | arp.opcode | arp.src.proto_ipv4 | arp.dst.proto_ipv4 | ip.dst
+# Hostname detection is handled separately via capture_lldp_live() + detect_hostname().
 # detect_* functions read EXTRACT_FILE with awk — no further PCAP access needed.
 ##
 extract_all_fields() {
   echo "[*] Extracting fields (single pass)..."
   local tshark_stderr
   tshark_stderr=$(sudo tshark -r "$CAPTURE_FILE" \
-    -Y "arp or lldp or (udp.dstport == 53 and not ip.dst == 224.0.0.251 and not ip.dst == 224.0.0.252)" \
+    -Y "arp or (udp.dstport == 53 and not ip.dst == 224.0.0.251 and not ip.dst == 224.0.0.252)" \
     -T fields \
     -e frame.protocols \
     -e eth.src \
     -e arp.opcode \
     -e arp.src.proto_ipv4 \
     -e arp.dst.proto_ipv4 \
-    -e lldp.tlv.system.name \
     -e ip.dst \
     -E separator="|" \
     2>&1 1>"$EXTRACT_FILE")
@@ -230,15 +241,12 @@ detect_hostname() {
   if [ -z "$SPOOFED_MAC" ]; then debug_log "Cannot detect hostname without MAC. Skipping."; return; fi
   debug_log "Analyzing capture for hostname from MAC ${SPOOFED_MAC}..."
 
+  # Live mode: CAPTURE_FILE contains LLDP frames from the live capture.
+  # Offline mode: LLDP_CAPTURE_FILE is a tiny dedicated live LLDP capture.
+  local lldp_src="${LLDP_CAPTURE_FILE:-$CAPTURE_FILE}"
   local lldp_hostname
-  if [ -n "$EXTRACT_FILE" ]; then
-    # $6=lldp.tlv.system.name — populated for LLDP frames by the single extract pass
-    lldp_hostname=$(awk -F'|' 'tolower($2) == tolower(mac) && $6 != "" {print $6; exit}' \
-      mac="$SPOOFED_MAC" "$EXTRACT_FILE")
-  else
-    lldp_hostname=$(sudo tshark -r "${CAPTURE_FILE}" -Y "lldp and eth.src == ${SPOOFED_MAC}" -V 2>/dev/null \
-      | grep -E "System Name:|Chassis Subtype = Locally assigned, Id:" | head -n 1 | awk -F': ' '{print $2}')
-  fi
+  lldp_hostname=$(sudo tshark -r "${lldp_src}" -Y "lldp and eth.src == ${SPOOFED_MAC}" -V 2>/dev/null \
+    | grep -E "System Name:|Chassis Subtype = Locally assigned, Id:" | head -n 1 | awk -F': ' '{print $2}')
 
   if [ -n "$lldp_hostname" ]; then
     SPOOFED_HOSTNAME=$(echo "$lldp_hostname" | cut -d'.' -f1)
@@ -330,8 +338,8 @@ detect_dns() {
 
   local dns_queries
   if [ -n "$EXTRACT_FILE" ]; then
-    # $7=ip.dst — already filtered to dns-only packets by extract_all_fields
-    dns_queries=$(awk -F'|' '$7 != "" {print $7}' "$EXTRACT_FILE")
+    # $6=ip.dst — already filtered to dns-only packets by extract_all_fields
+    dns_queries=$(awk -F'|' '$6 != "" {print $6}' "$EXTRACT_FILE")
   else
     dns_queries=$(sudo tshark -r "${CAPTURE_FILE}" \
       -Y "udp.dstport == 53 and not ip.dst == 224.0.0.251 and not ip.dst == 224.0.0.252" \
@@ -650,7 +658,11 @@ run_detection_cycle() {
         else
             load_pcap_offline
         fi
-        if $DO_IP_MAC;   then detect_ip_mac;   fi
+        if $DO_IP_MAC; then detect_ip_mac; fi
+        # Offline mode: after MAC is known, do a short live LLDP capture for hostname
+        if ! $LIVE_CAPTURE && $DO_HOSTNAME && [ -z "$SPOOFED_HOSTNAME" ]; then
+            capture_lldp_live
+        fi
         if $DO_HOSTNAME; then detect_hostname; fi
         if $DO_GATEWAY;  then detect_gateway;  fi
         if $DO_DNS;      then detect_dns;      fi
