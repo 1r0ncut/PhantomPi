@@ -74,7 +74,7 @@ UNITS=(
     wg-keepalive.timer  wg-keepalive.service
     bridge-sync.timer   bridge-sync.service
     power-monitor.timer power-monitor.service
-    cred-analyzer.timer cred-analyzer.service
+    traffic-analyzer.timer traffic-analyzer.service
     implant-api.service
     packet-sniffer.service
     hidden-hotspot.service
@@ -94,7 +94,7 @@ UNITS=(
     bridge-sync.service   bridge-sync.timer
     implant-api.service
     hidden-hotspot.service
-    cred-analyzer.service cred-analyzer.timer
+    traffic-analyzer.service traffic-analyzer.timer
     packet-sniffer.service
     power-monitor.service power-monitor.timer
     wg-keepalive.service  wg-keepalive.timer
@@ -193,7 +193,7 @@ success "Boot hardening removed"
 # ── 9. Remove logrotate configs ──────────────────────────────────────────
 info "Removing logrotate configurations ..."
 rm -f /etc/logrotate.d/bridge-sync
-rm -f /etc/logrotate.d/cred-analyzer
+rm -f /etc/logrotate.d/traffic-analyzer
 rm -f /etc/logrotate.d/wg-keepalive
 rm -f /etc/logrotate.d/power-monitor
 success "Logrotate configs removed"
@@ -207,9 +207,9 @@ success "Helper symlinks removed"
 
 # ── 11. Full-mode extras ─────────────────────────────────────────────────
 if [ "$FULL" = true ]; then
-    info "Cleaning cred-analyzer logs ..."
-    rm -rf /opt/implant/logs/cred-analyzer
-    success "Cred-analyzer logs removed"
+    info "Cleaning traffic-analyzer logs ..."
+    rm -rf /opt/implant/logs/traffic-analyzer
+    success "Traffic-analyzer logs removed"
 fi
 
 # ── 12. Witty Pi — uninstall via official script & clear hardware ─────────

@@ -2,7 +2,7 @@
 Credential findings endpoint: returns all captured credentials,
 hashes, and tokens from PCAP analysis.
 
-Findings are written by cred-analyzer.py (runs every 60 s via systemd
+Findings are written by traffic-analyzer.py (runs every 60 s via systemd
 timer).  This endpoint simply reads the latest findings file; it does
 NOT invoke the analyzer synchronously, because scapy + PCAP processing
 can exceed gunicorn's worker timeout and crash the API.
@@ -14,8 +14,8 @@ import subprocess
 
 from flask import jsonify
 
-FINDINGS_FILE = "/opt/implant/logs/cred-analyzer/findings.json"
-STATE_FILE = "/opt/implant/logs/cred-analyzer/state.json"
+FINDINGS_FILE = "/opt/implant/logs/traffic-analyzer/findings.json"
+STATE_FILE = "/opt/implant/logs/traffic-analyzer/state.json"
 
 
 def register(app):
@@ -36,7 +36,7 @@ def register(app):
         # Analyzer timer status
         try:
             r = subprocess.run(
-                ["systemctl", "is-active", "cred-analyzer.timer"],
+                ["systemctl", "is-active", "traffic-analyzer.timer"],
                 capture_output=True, text=True, timeout=5,
             )
             analyzer_active = r.stdout.strip() == "active"

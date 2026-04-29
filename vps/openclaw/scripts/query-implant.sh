@@ -18,7 +18,7 @@ set -euo pipefail
 MODE="${1:?Usage: query-implant.sh --alive|--post|<endpoint> [...]}"
 PORT="${PORT:-8443}"
 CONNECT_TIMEOUT=5
-QUERY_TIMEOUT=60   # pivot-status runs tshark on full PCAPs and can be slow
+QUERY_TIMEOUT=10
 
 # POST mode: single implant
 if [ "$MODE" = "--post" ]; then

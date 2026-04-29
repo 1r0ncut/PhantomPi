@@ -47,7 +47,7 @@ def register(app):
             "wg-keepalive.timer",
             "bridge-sync.timer",
             "packet-sniffer.service",
-            "cred-analyzer.timer",
+            "traffic-analyzer.timer",
             "power-monitor.timer",
             "hidden-hotspot.service",
         ]

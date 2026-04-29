@@ -26,7 +26,7 @@ from .ui import UI
 _LOG_DIRS = [
     "bridge-sync",
     "hidden-hotspot",
-    "cred-analyzer",
+    "traffic-analyzer",
     "packet-sniffer",
     "power-monitor",
     "spoof-target",
@@ -42,7 +42,7 @@ _EXEC_SCRIPTS = [
     "power-monitor.sh",
     "spoof-target.sh",
     "wg-keepalive.sh",
-    "cred-analyzer.py",
+    "traffic-analyzer.py",
 ]
 
 # Symlinks in /usr/local/bin/ for quick operator access
@@ -199,8 +199,8 @@ def generate_config_env(config: dict, ui: UI) -> None:
         f'SNIFFER_MAX_FILE_SIZE_MB={get(config, "sniffer", "max_file_size_mb", default=200)}',
         f'SNIFFER_MAX_TOTAL_FILES={get(config, "sniffer", "max_total_files", default=5)}',
         "",
-        "# --- Credential Analyzer ---",
-        'CRED_ANALYZER_LOG_DIR="/opt/implant/logs/cred-analyzer"',
+        "# --- Traffic Analyzer ---",
+        'TRAFFIC_ANALYZER_LOG_DIR="/opt/implant/logs/traffic-analyzer"',
         "",
         "# --- OpenClaw Notifications ---",
         f'OPENCLAW_NOTIFY_BRIDGE="{get(config, "openclaw", "notify_bridge", default="yes")}"',

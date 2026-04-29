@@ -19,7 +19,7 @@ Infer mode from interface state:
 | `wg-keepalive.timer` | WireGuard tunnel monitor | Yes |
 | `bridge-sync.timer` | Bridge heartbeat to VPS | No (normal when bridge down) |
 | `packet-sniffer.service` | tcpdump on `eth2` | Yes — captures lost |
-| `cred-analyzer.timer` | PCAP credential parser | Yes |
+| `traffic-analyzer.timer` | PCAP traffic/credential analyzer | Yes |
 | `power-monitor.timer` | Voltage/throttle monitor | Yes |
 | `hidden-hotspot.service` | Emergency WiFi AP | Only if configured |
 | `implant-api.service` | HTTPS API on port 8443 | Yes |
@@ -37,7 +37,7 @@ Infer mode from interface state:
 
 ## Credential Capture Pipeline
 
-Bridge mode only: `packet-sniffer` captures to rotating PCAPs → `cred-analyzer` parses every 60s → findings written to `findings.json` + pushed via webhook.
+Bridge mode only: `packet-sniffer` captures to rotating PCAPs → `traffic-analyzer` parses every 60s → credentials written to `findings.json` + pushed via webhook; subnet suggestions written to `subnet-suggestions.json` (read by `/pivot-status`).
 
 Captured types:
 - **NetNTLMv1/v2**: hashcat `-m 5500` / `-m 5600` or relay

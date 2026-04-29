@@ -24,13 +24,13 @@ _SYSTEMD_UNITS: dict[str, str] = {
     "bridge-sync.service":              "/opt/implant/services/bridge-sync.service",
     "implant-api.service":              "/opt/implant/services/implant-api.service",
     "hidden-hotspot.service":           "/opt/implant/services/hidden-hotspot.service",
-    "cred-analyzer.service":            "/opt/implant/services/cred-analyzer.service",
+    "traffic-analyzer.service":         "/opt/implant/services/traffic-analyzer.service",
     "packet-sniffer.service":           "/opt/implant/services/packet-sniffer.service",
     "power-monitor.service":            "/opt/implant/services/power-monitor.service",
     "wg-keepalive.service":             "/opt/implant/services/wg-keepalive.service",
     # timers
     "bridge-sync.timer":                "/opt/implant/timers/bridge-sync.timer",
-    "cred-analyzer.timer":              "/opt/implant/timers/cred-analyzer.timer",
+    "traffic-analyzer.timer":           "/opt/implant/timers/traffic-analyzer.timer",
     "power-monitor.timer":              "/opt/implant/timers/power-monitor.timer",
     "wg-keepalive.timer":               "/opt/implant/timers/wg-keepalive.timer",
 }
@@ -38,7 +38,7 @@ _SYSTEMD_UNITS: dict[str, str] = {
 # Timers to ALWAYS enable at boot (safe regardless of config)
 _ENABLE_TIMERS_ALWAYS = [
     "bridge-sync.timer",
-    "cred-analyzer.timer",
+    "traffic-analyzer.timer",
     "power-monitor.timer",
 ]
 
@@ -56,7 +56,7 @@ _ENABLE_SERVICES = [
 # Logrotate entries  (name -> log path)
 _LOGROTATE: dict[str, str] = {
     "bridge-sync":   "/opt/implant/logs/bridge-sync/bridge-sync.log",
-    "cred-analyzer":  "/opt/implant/logs/cred-analyzer/cred-analyzer.log",
+    "traffic-analyzer": "/opt/implant/logs/traffic-analyzer/traffic-analyzer.log",
     "wg-keepalive":  "/opt/implant/logs/wg-keepalive/wg-keepalive.log",
     "power-monitor": "/opt/implant/logs/power-monitor/power-monitor.log",
 }

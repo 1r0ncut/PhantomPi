@@ -1,31 +1,20 @@
 """
 Pivot status endpoint: returns pivot readiness, spoofed identity from the
-spoof-target log, current routes on veth1, and internal subnet suggestions
-derived from captured traffic PCAPs and credential findings.
+spoof-target log, current routes on veth1, and suggested subnets from the
+traffic-analyzer pre-computed cache (subnet-suggestions.json).
 """
 
 import json
 import os
 import re
 import subprocess
-from collections import defaultdict
 
 from flask import jsonify
 
-VETH_IN       = "veth0"
-VETH_OUT      = "veth1"
-SPOOF_LOG     = "/opt/implant/logs/spoof-target/spoof-target.log"
-PCAP_DIR      = "/opt/implant/logs/packet-sniffer"
-FINDINGS_FILE = "/opt/implant/logs/cred-analyzer/findings.json"
-PCAP_LIMIT    = 2       # most recent PCAPs to read in full (no packet cap)
-
-# RFC 1918 ranges as (base, mask) integer pairs
-_RFC1918 = [
-    (0x0A000000, 0xFF000000),  # 10.0.0.0/8
-    (0xAC100000, 0xFFF00000),  # 172.16.0.0/12
-    (0xC0A80000, 0xFFFF0000),  # 192.168.0.0/16
-]
-
+VETH_IN      = "veth0"
+VETH_OUT     = "veth1"
+SPOOF_LOG    = "/opt/implant/logs/spoof-target/spoof-target.log"
+SUBNETS_FILE = "/opt/implant/logs/traffic-analyzer/subnet-suggestions.json"
 
 
 def _run(cmd):
@@ -39,28 +28,6 @@ def _run(cmd):
 
 def _iface_exists(name):
     return _run(f"ip link show {name} 2>/dev/null") != ""
-
-
-def _ip_to_int(ip):
-    try:
-        p = [int(x) for x in ip.split(".")]
-        return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]
-    except Exception:
-        return None
-
-
-def _is_rfc1918(ip):
-    n = _ip_to_int(ip)
-    if n is None:
-        return False
-    return any((n & mask) == base for base, mask in _RFC1918)
-
-
-def _to_slash24(ip):
-    parts = ip.split(".")
-    if len(parts) != 4:
-        return None
-    return f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
 
 
 def _parse_spoof_log():
@@ -107,84 +74,17 @@ def _current_routes():
 
 def _suggest_subnets():
     """
-    Return ranked list of internal subnets from two sources:
-    1. Recent PCAPs (tshark): live traffic analysis
-    2. Credential findings: destination IPs from cred-analyzer findings.json
-       (persists across PCAP rotation, so nothing is lost)
+    Read pre-computed subnet suggestions written by traffic-analyzer.
+    Returns instantly -- no PCAP processing at query time.
     """
-    subnet_data = defaultdict(lambda: {"packets": 0, "protocols": set()})
-
-    # Source 1: recent PCAPs
-    if os.path.isdir(PCAP_DIR):
-        try:
-            all_files = [
-                os.path.join(PCAP_DIR, f)
-                for f in os.listdir(PCAP_DIR)
-                if re.search(r'\.pcap\d*$', f)
-            ]
-            pcaps = sorted(all_files, key=os.path.getmtime, reverse=True)[:PCAP_LIMIT]
-        except OSError:
-            pcaps = []
-
-        for pcap in pcaps:
-            out = _run(
-                f"tshark -r '{pcap}' -T fields "
-                f"-e ip.dst -e _ws.col.Protocol "
-                f"-Y 'ip and not ip.dst == 255.255.255.255' 2>/dev/null"
-            )
-            for line in out.splitlines():
-                parts = line.split("\t")
-                dst_ip = parts[0].strip() if parts else ""
-                if not dst_ip or not _is_rfc1918(dst_ip):
-                    continue
-                subnet = _to_slash24(dst_ip)
-                if not subnet:
-                    continue
-                subnet_data[subnet]["packets"] += 1
-                if len(parts) > 1:
-                    proto = parts[1].strip()
-                    if proto:
-                        subnet_data[subnet]["protocols"].add(proto)
-
-    # Source 2: credential findings (dst IPs survive PCAP rotation)
-    if os.path.isfile(FINDINGS_FILE):
-        try:
-            with open(FINDINGS_FILE) as fh:
-                raw = json.load(fh)
-            findings = raw.get("findings", []) if isinstance(raw, dict) else raw
-            for finding in findings:
-                dst = finding.get("dst", "")
-                if not dst:
-                    continue
-                dst_ip = dst.split(":")[0]
-                if not _is_rfc1918(dst_ip):
-                    continue
-                subnet = _to_slash24(dst_ip)
-                if not subnet:
-                    continue
-                # Count each finding as one packet-equivalent; tag protocol
-                subnet_data[subnet]["packets"] += 1
-                proto = finding.get("protocol", "")
-                if proto:
-                    subnet_data[subnet]["protocols"].add(f"{proto} [cred]")
-        except (json.JSONDecodeError, OSError, KeyError):
-            pass
-
-    if not subnet_data:
+    if not os.path.isfile(SUBNETS_FILE):
         return []
-
-    suggestions = []
-    for subnet, data in sorted(
-        subnet_data.items(), key=lambda x: x[1]["packets"], reverse=True
-    ):
-        hints = sorted(data["protocols"])
-        suggestions.append({
-            "subnet":  subnet,
-            "packets": data["packets"],
-            "hint":    ", ".join(hints) if hints else "unknown",
-        })
-
-    return suggestions
+    try:
+        with open(SUBNETS_FILE) as fh:
+            data = json.load(fh)
+        return data.get("suggestions", [])
+    except (json.JSONDecodeError, OSError):
+        return []
 
 
 def register(app):

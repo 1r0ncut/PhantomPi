@@ -227,7 +227,7 @@ flowchart TB
 │   └── venv/               # Python virtual environment
 ├── scripts/
 │   ├── bridge-sync.sh      # Bridge lifecycle (auto create/teardown)
-│   ├── cred-analyzer.py    # Scapy-based PCAP credential extractor
+│   ├── traffic-analyzer.py # Scapy-based PCAP credential + subnet analyzer
 │   ├── spoof-target.sh     # Identity detection & spoofing
 │   ├── wg-keepalive.sh     # VPN auto-reconnect
 │   ├── hidden-hotspot.sh   # Emergency WiFi AP
@@ -235,7 +235,7 @@ flowchart TB
 │   └── trigger-lldp.py     # LLDP hostname extraction
 ├── logs/
 │   ├── packet-sniffer/     # Rolling PCAP captures
-│   └── cred-analyzer/      # findings.json + state.json
+│   └── traffic-analyzer/   # findings.json + subnet-suggestions.json + state.json
 ├── services/               # systemd service units
 ├── timers/                 # systemd timer units
 └── wittypi/                # Witty Pi 4 power management + UWI
