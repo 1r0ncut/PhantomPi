@@ -164,9 +164,9 @@ load_pcap_offline() {
 ##
 # Single tshark pass over CAPTURE_FILE extracting all fields needed by every
 # detect_* function. Result is saved to EXTRACT_FILE as pipe-delimited text:
-# frame.protocols | eth.src | arp.opcode | arp.src.proto_ipv4 | arp.dst.proto_ipv4
-#                | lldp.tlv.system.name | ip.dst
+# frame.protocols | eth.src | arp.opcode | arp.src.proto_ipv4 | arp.dst.proto_ipv4 | ip.dst
 # detect_* functions read EXTRACT_FILE with awk — no further PCAP access needed.
+# Note: hostname detection always uses tshark -V on CAPTURE_FILE directly.
 ##
 extract_all_fields() {
   echo "[*] Extracting fields (single pass)..."
@@ -179,7 +179,6 @@ extract_all_fields() {
     -e arp.opcode \
     -e arp.src.proto_ipv4 \
     -e arp.dst.proto_ipv4 \
-    -e lldp.tlv.system.name \
     -e ip.dst \
     -E separator="|" \
     2>&1 1>"$EXTRACT_FILE")
@@ -230,15 +229,11 @@ detect_hostname() {
   if [ -z "$SPOOFED_MAC" ]; then debug_log "Cannot detect hostname without MAC. Skipping."; return; fi
   debug_log "Analyzing capture for hostname from MAC ${SPOOFED_MAC}..."
 
+  # Always use tshark -V on CAPTURE_FILE — field-based extraction is unreliable
+  # for LLDP hostname TLVs. CAPTURE_FILE is set in both live and offline modes.
   local lldp_hostname
-  if [ -n "$EXTRACT_FILE" ]; then
-    # $6=lldp.tlv.system.name, $2=eth.src
-    lldp_hostname=$(awk -F'|' 'tolower($2) == tolower(mac) && $6 != "" {print $6; exit}' \
-      mac="$SPOOFED_MAC" "$EXTRACT_FILE")
-  else
-    lldp_hostname=$(sudo tshark -r "${CAPTURE_FILE}" -Y "lldp and eth.src == ${SPOOFED_MAC}" -V 2>/dev/null \
-      | grep -E "System Name:|Chassis Subtype = Locally assigned, Id:" | head -n 1 | awk -F': ' '{print $2}')
-  fi
+  lldp_hostname=$(sudo tshark -r "${CAPTURE_FILE}" -Y "lldp and eth.src == ${SPOOFED_MAC}" -V 2>/dev/null \
+    | grep -E "System Name:|Chassis Subtype = Locally assigned, Id:" | head -n 1 | awk -F': ' '{print $2}')
 
   if [ -n "$lldp_hostname" ]; then
     SPOOFED_HOSTNAME=$(echo "$lldp_hostname" | cut -d'.' -f1)
@@ -330,8 +325,8 @@ detect_dns() {
 
   local dns_queries
   if [ -n "$EXTRACT_FILE" ]; then
-    # $7=ip.dst — already filtered to dns-only packets by extract_all_fields
-    dns_queries=$(awk -F'|' '$7 != "" {print $7}' "$EXTRACT_FILE")
+    # $6=ip.dst — already filtered to dns-only packets by extract_all_fields
+    dns_queries=$(awk -F'|' '$6 != "" {print $6}' "$EXTRACT_FILE")
   else
     dns_queries=$(sudo tshark -r "${CAPTURE_FILE}" \
       -Y "udp.dstport == 53 and not ip.dst == 224.0.0.251 and not ip.dst == 224.0.0.252" \
