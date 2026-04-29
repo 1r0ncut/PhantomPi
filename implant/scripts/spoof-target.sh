@@ -22,6 +22,7 @@ SPOOFED_HOSTNAME=""
 GATEWAY_IP=""
 DNS_SERVER=""
 CAPTURE_FILE=""
+EXTRACT_FILE=""
 
 # --- Option Flags ---
 DO_IP_MAC=false
@@ -139,7 +140,8 @@ load_pcap_offline() {
   fi
 
   CAPTURE_FILE=$(sudo mktemp /tmp/spoof-target-offline-XXXXXX.pcap)
-  trap 'sudo rm -f "$CAPTURE_FILE"' EXIT
+  EXTRACT_FILE=$(mktemp /tmp/spoof-target-fields-XXXXXX.tsv)
+  trap 'sudo rm -f "$CAPTURE_FILE"; rm -f "$EXTRACT_FILE"' EXIT
 
   local count
   count=$(echo "$pcap_list" | wc -l)
@@ -155,28 +157,54 @@ load_pcap_offline() {
   packets_captured=$(sudo capinfos -c "$CAPTURE_FILE" | awk '{print $NF}')
   echo "[+] Loaded ${packets_captured} packets from ${count} offline PCAP(s)."
   debug_log "Merged offline PCAP: ${CAPTURE_FILE}"
+
+  extract_all_fields
+}
+
+##
+# Single tshark pass over CAPTURE_FILE extracting all fields needed by every
+# detect_* function. Result is saved to EXTRACT_FILE as pipe-delimited text:
+# frame.protocols | eth.src | arp.opcode | arp.src.proto_ipv4 | arp.dst.proto_ipv4
+#                | lldp.tlv.system.name | lldp.chassis.id.local | ip.dst
+# detect_* functions read EXTRACT_FILE with awk — no further PCAP access needed.
+##
+extract_all_fields() {
+  echo "[*] Extracting fields (single pass)..."
+  sudo tshark -r "$CAPTURE_FILE" \
+    -Y "arp or lldp or (udp.dstport == 53 and not ip.dst == 224.0.0.251 and not ip.dst == 224.0.0.252)" \
+    -T fields \
+    -e frame.protocols \
+    -e eth.src \
+    -e arp.opcode \
+    -e arp.src.proto_ipv4 \
+    -e arp.dst.proto_ipv4 \
+    -e lldp.tlv.system.name \
+    -e lldp.chassis.id.local \
+    -e ip.dst \
+    -E separator="|" \
+    2>/dev/null > "$EXTRACT_FILE"
+  debug_log "Extracted $(wc -l < "$EXTRACT_FILE") relevant packets to ${EXTRACT_FILE}"
 }
 
 ##
 # Detects IP and MAC address from the capture file.
 ##
 detect_ip_mac() {
-  # Skip analysis if we already have the info
   if [ -n "$SPOOFED_IP" ] && [ -n "$SPOOFED_MAC" ]; then return; fi
-
   debug_log "Analyzing capture for IP/MAC..."
-  local arp_replies
-  arp_replies=$(sudo tshark -r "${CAPTURE_FILE}" -Y "arp.opcode == 2" -T fields -e eth.src -e arp.src.proto_ipv4 2>/dev/null)
 
-  if [ -z "$arp_replies" ]; then
-    debug_log "No ARP replies found in capture."
-    return
+  local arp_replies
+  if [ -n "$EXTRACT_FILE" ]; then
+    # col: $3=arp.opcode, $2=eth.src, $4=arp.src.proto_ipv4
+    arp_replies=$(awk -F'|' '$3 == "2" && $2 != "" && $4 != "" {print $2, $4}' "$EXTRACT_FILE")
+  else
+    arp_replies=$(sudo tshark -r "${CAPTURE_FILE}" -Y "arp.opcode == 2" -T fields -e eth.src -e arp.src.proto_ipv4 2>/dev/null)
   fi
 
-  # Find the most frequent IP/MAC pair
+  if [ -z "$arp_replies" ]; then debug_log "No ARP replies found."; return; fi
+
   local best_pair
   best_pair=$(echo "$arp_replies" | sort | uniq -c | sort -nr | head -n 1 | awk '{print $2, $3}')
-  
   SPOOFED_MAC=$(echo "$best_pair" | awk '{print $1}')
   SPOOFED_IP=$(echo "$best_pair" | awk '{print $2}')
   echo "[+] Target IP/MAC detected: ${SPOOFED_IP} (${SPOOFED_MAC})"
@@ -187,20 +215,25 @@ detect_ip_mac() {
 ##
 detect_hostname() {
   if [ -n "$SPOOFED_HOSTNAME" ]; then return; fi
-  if [ -z "$SPOOFED_MAC" ]; then
-    debug_log "Cannot detect hostname without a target MAC. Skipping for now."
-    return
-  fi
+  if [ -z "$SPOOFED_MAC" ]; then debug_log "Cannot detect hostname without MAC. Skipping."; return; fi
   debug_log "Analyzing capture for hostname from MAC ${SPOOFED_MAC}..."
 
-  # Attempt to find hostname via LLDP
   local lldp_hostname
-  lldp_hostname=$(sudo tshark -r "${CAPTURE_FILE}" -Y "lldp and eth.src == ${SPOOFED_MAC}" -V 2>/dev/null | grep -E "System Name:|Chassis Subtype = Locally assigned, Id:" | head -n 1 | awk -F': ' '{print $2}')
+  if [ -n "$EXTRACT_FILE" ]; then
+    # $6=lldp.tlv.system.name, $7=lldp.chassis.id.local, $2=eth.src
+    lldp_hostname=$(awk -F'|' 'tolower($2) == tolower(mac) && $6 != "" {print $6; exit}' \
+      mac="$SPOOFED_MAC" "$EXTRACT_FILE")
+    [ -z "$lldp_hostname" ] && \
+      lldp_hostname=$(awk -F'|' 'tolower($2) == tolower(mac) && $7 != "" {print $7; exit}' \
+        mac="$SPOOFED_MAC" "$EXTRACT_FILE")
+  else
+    lldp_hostname=$(sudo tshark -r "${CAPTURE_FILE}" -Y "lldp and eth.src == ${SPOOFED_MAC}" -V 2>/dev/null \
+      | grep -E "System Name:|Chassis Subtype = Locally assigned, Id:" | head -n 1 | awk -F': ' '{print $2}')
+  fi
 
   if [ -n "$lldp_hostname" ]; then
     SPOOFED_HOSTNAME=$(echo "$lldp_hostname" | cut -d'.' -f1)
     echo "[+] Target Hostname detected (from LLDP): ${SPOOFED_HOSTNAME}"
-    return
   fi
 }
 
@@ -209,36 +242,40 @@ detect_hostname() {
 ##
 detect_gateway() {
   if [ -n "$GATEWAY_IP" ]; then return; fi
-
   debug_log "Analyzing capture for Gateway using multi-layered heuristic..."
 
-  # --- Step 1: Find the most 'central' IP using the conversational heuristic ---
   local all_arp_ips
-  all_arp_ips=$(sudo tshark -r "${CAPTURE_FILE}" -Y "arp" -T fields -e arp.src.proto_ipv4 -e arp.dst.proto_ipv4 2>/dev/null | tr '\t' '\n')
+  if [ -n "$EXTRACT_FILE" ]; then
+    # $4=arp.src.proto_ipv4, $5=arp.dst.proto_ipv4 — emit each non-empty IP on its own line
+    all_arp_ips=$(awk -F'|' '{if ($4 != "") print $4; if ($5 != "") print $5}' "$EXTRACT_FILE")
+  else
+    all_arp_ips=$(sudo tshark -r "${CAPTURE_FILE}" -Y "arp" -T fields \
+      -e arp.src.proto_ipv4 -e arp.dst.proto_ipv4 2>/dev/null | tr '\t' '\n')
+  fi
 
   if [ -z "$all_arp_ips" ]; then return; fi
 
   local top_candidate
   top_candidate=$(echo "$all_arp_ips" | grep -v "^${SPOOFED_IP}$" | sort | uniq -c | sort -nr | head -n 1 | awk '{print $2}')
 
-  # --- Step 2: Check if the top candidate is a common gateway IP ---
   if [[ "$top_candidate" =~ \.1$ || "$top_candidate" =~ \.254$ ]]; then
     debug_log "Top candidate (${top_candidate}) is a common gateway. Selecting it."
     GATEWAY_IP=$top_candidate
   else
-    # --- Step 3: If not, fall back to the 'most requested' heuristic ---
-    debug_log "Top candidate is not a common gateway. Falling back to most-requested IP."
+    debug_log "Top candidate not a common gateway. Falling back to most-requested IP."
     local arp_targets
-    arp_targets=$(sudo tshark -r "${CAPTURE_FILE}" -Y "arp.opcode == 1" -T fields -e arp.dst.proto_ipv4 2>/dev/null | grep -v "^${SPOOFED_IP}$")
-
+    if [ -n "$EXTRACT_FILE" ]; then
+      arp_targets=$(awk -F'|' '$3 == "1" && $5 != "" {print $5}' "$EXTRACT_FILE")
+    else
+      arp_targets=$(sudo tshark -r "${CAPTURE_FILE}" -Y "arp.opcode == 1" -T fields \
+        -e arp.dst.proto_ipv4 2>/dev/null)
+    fi
     if [ -n "$arp_targets" ]; then
       GATEWAY_IP=$(echo "$arp_targets" | grep -v "^${SPOOFED_IP}$" | sort | uniq -c | sort -nr | head -n 1 | awk '{print $2}')
     fi
   fi
 
-  if [ -n "$GATEWAY_IP" ]; then
-    echo "[+] Gateway detected: ${GATEWAY_IP}"
-  fi
+  if [ -n "$GATEWAY_IP" ]; then echo "[+] Gateway detected: ${GATEWAY_IP}"; fi
 }
 
 ##
@@ -280,11 +317,17 @@ detect_gateway2() {
 ##
 detect_dns() {
   if [ -n "$DNS_SERVER" ]; then return; fi
-
   debug_log "Analyzing capture for DNS Server..."
-  local dns_queries
 
-  dns_queries=$(sudo tshark -r "${CAPTURE_FILE}" -Y "udp.dstport == 53 and not ip.dst == 224.0.0.251 and not ip.dst == 224.0.0.252" -T fields -e ip.dst 2>/dev/null)
+  local dns_queries
+  if [ -n "$EXTRACT_FILE" ]; then
+    # $8=ip.dst — already filtered to dns-only packets by extract_all_fields
+    dns_queries=$(awk -F'|' '$8 != "" {print $8}' "$EXTRACT_FILE")
+  else
+    dns_queries=$(sudo tshark -r "${CAPTURE_FILE}" \
+      -Y "udp.dstport == 53 and not ip.dst == 224.0.0.251 and not ip.dst == 224.0.0.252" \
+      -T fields -e ip.dst 2>/dev/null)
+  fi
 
   if [ -n "$dns_queries" ]; then
     DNS_SERVER=$(echo "$dns_queries" | sort | uniq -c | sort -nr | head -n 1 | awk '{print $2}')
@@ -598,10 +641,10 @@ run_detection_cycle() {
         else
             load_pcap_offline
         fi
-        if $DO_IP_MAC; then detect_ip_mac; fi
+        if $DO_IP_MAC;   then detect_ip_mac;   fi
         if $DO_HOSTNAME; then detect_hostname; fi
-        if $DO_GATEWAY; then detect_gateway; fi
-        if $DO_DNS; then detect_dns; fi
+        if $DO_GATEWAY;  then detect_gateway;  fi
+        if $DO_DNS;      then detect_dns;      fi
     else
         debug_log "All requested information was provided manually. Skipping capture."
     fi
