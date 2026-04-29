@@ -13,7 +13,7 @@ metadata: {"openclaw":{"requires":{"bins":["curl","nc"]},"os":["linux"]}}
 
 ## Command 0: "Any new routes?" / "What subnets can I add?"
 
-Just fetch pivot-status and show only `suggested_subnets`, ranked by packet count. Skip identity context, do not prompt for setup.
+Just fetch pivot-status and show **every entry** in `suggested_subnets`, ranked by packet count. Report all of them; do not filter or drop entries with low packet counts. Skip identity context, do not prompt for setup.
 
 ```bash
 bash /home/openclaw/scripts/query-implant.sh /pivot-status [IMPLANT_IP]
