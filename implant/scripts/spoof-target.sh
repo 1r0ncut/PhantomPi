@@ -23,6 +23,8 @@ DO_GATEWAY=false
 DO_DNS=false
 FORCE_CAPTURE=false
 DEBUG=false
+LAST_SPOOFED=false
+DETECT_NET_CONFIG=false
 TIMEOUT=30 # Default capture timeout
 
 # --- Functions ---
@@ -59,6 +61,10 @@ usage() {
   echo "  --force              Capture in loops until all requested information is found."
   echo "  --debug              Enable verbose debugging output."
   echo "  --help               Display this help message."
+  echo ""
+  echo "Restore:"
+  echo "  --last-spoofed       Re-apply the last successfully applied identity from logs."
+  echo "                       Skips all detection; reads IP, MAC, hostname from log."
   echo ""
   echo "Cleanup:"
   echo "  --clean              Remove all created interfaces and rules."
@@ -259,6 +265,59 @@ log_info() {
 }
 
 ##
+# Reads the last successfully applied identity from the log and populates
+# the state variables. Exits with a clear error if no valid entry exists.
+##
+load_last_spoofed() {
+  if [ ! -f "$LOG_FILE" ]; then
+    echo "[!] No spoof-target log found at ${LOG_FILE}." >&2
+    echo "[!] Run a detection first (e.g.: spoof-target --all)." >&2
+    exit 1
+  fi
+
+  # Paragraph-mode awk: each blank-line-separated block is one record.
+  # Finds the last block that contains "Settings applied successfully".
+  local block
+  block=$(awk 'BEGIN{RS=""; FS="\n"} /Settings applied successfully/{last=$0} END{print last}' "$LOG_FILE")
+
+  if [ -z "$block" ]; then
+    echo "[!] No successfully applied identity found in ${LOG_FILE}." >&2
+    echo "[!] Run a detection first (e.g.: spoof-target --all)." >&2
+    exit 1
+  fi
+
+  # Parse fields from the block
+  SPOOFED_IP=$(      echo "$block" | grep "Spoofed IP:"       | sed 's/.*Spoofed IP:[[:space:]]*//')
+  SPOOFED_MAC=$(     echo "$block" | grep "Spoofed MAC:"      | sed 's/.*Spoofed MAC:[[:space:]]*//')
+  SPOOFED_HOSTNAME=$(echo "$block" | grep "Spoofed Hostname:" | sed 's/.*Spoofed Hostname:[[:space:]]*//')
+  GATEWAY_IP=$(      echo "$block" | grep "Detected Gateway:" | sed 's/.*Detected Gateway:[[:space:]]*//')
+  DNS_SERVER=$(      echo "$block" | grep "Detected DNS:"     | sed 's/.*Detected DNS:[[:space:]]*//')
+
+  # Clear "Not set" placeholders so apply_spoof_config skips optional fields
+  [ "$SPOOFED_HOSTNAME" = "Not set" ] && SPOOFED_HOSTNAME=""
+  [ "$GATEWAY_IP"       = "Not set" ] && GATEWAY_IP=""
+  [ "$DNS_SERVER"       = "Not set" ] && DNS_SERVER=""
+
+  # IP and MAC are required; anything else is fail-safe optional
+  if [ -z "$SPOOFED_IP" ] || [ "$SPOOFED_IP" = "Not set" ] || \
+     [ -z "$SPOOFED_MAC" ] || [ "$SPOOFED_MAC" = "Not set" ]; then
+    echo "[!] Incomplete identity in log (IP or MAC missing). Cannot restore." >&2
+    exit 1
+  fi
+
+  echo "[+] Last applied identity loaded from log."
+
+  # Set flags so display_summary_and_confirm shows all populated fields
+  DO_IP_MAC=true
+  [ -n "$SPOOFED_HOSTNAME" ] && DO_HOSTNAME=true
+  if [ -n "$GATEWAY_IP" ] || [ -n "$DNS_SERVER" ]; then
+    DETECT_NET_CONFIG=true
+    [ -n "$GATEWAY_IP" ] && DO_GATEWAY=true
+    [ -n "$DNS_SERVER" ] && DO_DNS=true
+  fi
+}
+
+##
 # Displays a summary and asks for user confirmation.
 ##
 display_summary_and_confirm() {
@@ -367,6 +426,7 @@ while [ "$#" -gt 0 ]; do
 
         --timeout) TIMEOUT="$2"; shift 2;;
         --force) FORCE_CAPTURE=true; shift;;
+        --last-spoofed) LAST_SPOOFED=true; shift;;
         --clean) cleanup;;
         --help) usage;;
         --debug) DEBUG=true; shift;;
@@ -375,9 +435,12 @@ while [ "$#" -gt 0 ]; do
 done
 
 # Check if at least one detection or set option was chosen for core info
-if [ -z "$SPOOFED_IP" ] && [ -z "$SPOOFED_MAC" ] && ! $DO_IP_MAC; then
+# (skipped when --last-spoofed is used; identity is loaded from log instead)
+if ! $LAST_SPOOFED; then
+  if [ -z "$SPOOFED_IP" ] && [ -z "$SPOOFED_MAC" ] && ! $DO_IP_MAC; then
     echo "[!] Error: You must either detect (--ip-mac) or provide (--set-ip/--set-mac) the target's identity." >&2
     usage
+  fi
 fi
 
 # --- Execution Flow ---
@@ -397,16 +460,21 @@ run_detection_cycle() {
     fi
 }
 
-# Run the first detection cycle
-run_detection_cycle
+# Load from log or run live detection
+if $LAST_SPOOFED; then
+    load_last_spoofed
+else
+    # Run the first detection cycle
+    run_detection_cycle
 
-# If in --force mode, loop until all requested information is found
-if $FORCE_CAPTURE; then
-    while ! check_detection_status; do
-        echo "[*] Some information is still missing. Retrying capture..."
-        run_detection_cycle
-    done
-    echo "[+] All requested information has been found!"
+    # If in --force mode, loop until all requested information is found
+    if $FORCE_CAPTURE; then
+        while ! check_detection_status; do
+            echo "[*] Some information is still missing. Retrying capture..."
+            run_detection_cycle
+        done
+        echo "[+] All requested information has been found!"
+    fi
 fi
 
 if display_summary_and_confirm; then
