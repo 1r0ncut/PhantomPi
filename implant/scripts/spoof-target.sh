@@ -7,6 +7,7 @@ BRIDGE="br0"
 LISTEN_IFACE="eth2"
 LOG_DIR="/opt/implant/logs/spoof-target"
 LOG_FILE="${LOG_DIR}/spoof-target.log"
+SUBNETS_FILE="/opt/implant/logs/traffic-analyzer/subnet-suggestions.json"
 
 # --- State Variables ---
 SPOOFED_IP=""
@@ -404,6 +405,74 @@ cleanup() {
   exit 0
 }
 
+##
+# Reads suggested subnets from the traffic-analyzer cache, shows them to the
+# user, and optionally adds routes on VETH_OUT. Default answer is N.
+##
+prompt_add_subnets() {
+  if [ ! -f "$SUBNETS_FILE" ]; then
+    echo "[*] No subnet suggestions found (traffic-analyzer has not run yet). Skipping."
+    return
+  fi
+
+  local suggestions
+  suggestions=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open('$SUBNETS_FILE'))
+    items = data.get('suggestions', [])
+    if not items:
+        sys.exit(1)
+    for i, s in enumerate(items, 1):
+        protocols = ', '.join(s.get('protocols', []))
+        line = f\"{i}. {s['subnet']}  ({s['pkt_count']} pkts)\"
+        if protocols:
+            line += f'  [{protocols}]'
+        print(line)
+except Exception as e:
+    print(f'error: {e}', file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null)
+
+  if [ -z "$suggestions" ]; then
+    echo "[*] No RFC1918 subnets found in recent captures. Skipping."
+    return
+  fi
+
+  echo ""
+  echo "--- Suggested Subnets (from traffic-analyzer) ---"
+  echo "$suggestions"
+  echo "-------------------------------------------------"
+
+  read -p "Add these routes via ${VETH_OUT}? (y/N): " subnet_confirm
+  if [[ ! "$subnet_confirm" =~ ^[yY]$ ]]; then
+    echo "[*] Skipping subnet routes."
+    return
+  fi
+
+  local cidrs
+  cidrs=$(python3 -c "
+import json
+data = json.load(open('$SUBNETS_FILE'))
+for s in data.get('suggestions', []):
+    print(s['subnet'])
+" 2>/dev/null)
+
+  local added=0 failed=0
+  while IFS= read -r subnet; do
+    [ -z "$subnet" ] && continue
+    if sudo ip route add "$subnet" dev "$VETH_OUT" 2>/dev/null; then
+      echo "[+] Route added: ${subnet} dev ${VETH_OUT}"
+      (( added++ )) || true
+    else
+      echo "[!] Skipped (already exists or failed): ${subnet}"
+      (( failed++ )) || true
+    fi
+  done <<< "$cidrs"
+
+  echo "[+] Done: ${added} added, ${failed} skipped/failed."
+}
+
 # --- Main Execution Logic ---
 
 # Check for essential tools
@@ -480,6 +549,7 @@ fi
 if display_summary_and_confirm; then
   apply_spoof_config
   log_info "Settings applied successfully."
+  prompt_add_subnets
 else
   log_info "User aborted; settings not applied."
   exit 1
