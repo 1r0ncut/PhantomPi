@@ -256,7 +256,7 @@ flowchart TB
 3. Verify:
    ```bash
    wg show
-   systemctl status openclaw
+   systemctl status openclaw-gateway.service
    ```
 
 > To undo everything and re-run from scratch:

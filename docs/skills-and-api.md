@@ -152,7 +152,7 @@ Before writing a new skill, check whether the implant API already exposes the da
 |----------|---------|
 | `GET /status` | Interface state, uptime, services, ports (clean JSON, no emojis) |
 | `GET /captured-creds` | All extracted credentials and hashes |
-| `GET /pivot-status` | Pivot readiness, spoofed identity from log, current veth1 routes, subnet suggestions from PCAPs |
+| `GET /pivot-status` | Pivot readiness, spoofed identity from log, current veth1 routes, subnet suggestions from traffic-analyzer cache |
 | `POST /pivot-setup` | Add routes through veth1 for specified subnets; gateway read from spoof-target log |
 | `POST /pivot-reset` | Remove specific or all routes from veth1 |
 | `GET /ligolo-sessions` | List active `ligolo-*` tmux sessions with proxy IP and running state |
@@ -189,7 +189,7 @@ def register(app):
 
 ```bash
 cp implant/api/app/routes/my_endpoint.py /opt/implant/api/app/routes/
-systemctl restart implant-api
+systemctl restart implant-api.service
 ```
 
 **3. Verify:**
