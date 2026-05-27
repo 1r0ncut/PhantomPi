@@ -47,7 +47,10 @@ LOG_FILE = os.path.join(CRED_ANALYZER_LOG_DIR, "cred-analyzer.log")
 def load_state() -> dict:
     if os.path.isfile(STATE_FILE):
         with open(STATE_FILE) as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                return {"files": {}, "seen": []}
     return {"files": {}, "seen": []}
 
 
