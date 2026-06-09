@@ -35,6 +35,7 @@ DEBUG=false
 LAST_SPOOFED=false
 LIVE_CAPTURE=false
 DETECT_NET_CONFIG=false
+SUPPRESS_TARGET_RST=false
 TIMEOUT=30           # Default capture timeout (--live only)
 TIMEOUT_EXPLICIT=false
 
@@ -77,6 +78,9 @@ usage() {
   echo "  --force              Repeat capture until all requested information is found."
   echo ""
   echo "Control Options:"
+  echo "  --suppress-target-rst"
+  echo "                       Suppress TCP RST packets forwarded from the real target."
+  echo "                       Useful when target resets disrupt Ligolo connections."
   echo "  --debug              Enable verbose debugging output."
   echo "  --help               Display this help message."
   echo ""
@@ -488,6 +492,14 @@ apply_spoof_config() {
   echo "[*] Adding iptables rule to block outgoing TCP RST packets..."
   sudo iptables -A OUTPUT -o veth1 -p tcp --tcp-flags RST RST -j DROP
 
+  if $SUPPRESS_TARGET_RST; then
+    # Prevent the original target from resetting connections proxied by Ligolo.
+    echo "[!] Suppressing TCP RST packets forwarded from the real target..."
+    if ! sudo nft -a list chain bridge filter FORWARD 2>/dev/null | grep -q 'comment "phantompi-spoof-rst"'; then
+      sudo nft insert rule bridge filter FORWARD iifname "$LISTEN_IFACE" ip protocol tcp tcp flags rst drop comment "phantompi-spoof-rst"
+    fi
+  fi
+
   # Disable MAC learning on the bridge to ensure it forwards all traffic
   echo "[*] Disabling MAC address aging on bridge ${BRIDGE}..."
   sudo brctl setageing "$BRIDGE" 0
@@ -512,6 +524,9 @@ cleanup() {
   sudo ebtables -D FORWARD -i "$VETH_IN" -o "$LISTEN_IFACE" -j DROP 2>/dev/null
   sudo arptables -D OUTPUT -o "$BRIDGE" --opcode Reply -j DROP 2>/dev/null
   sudo iptables -D OUTPUT -o "${VETH_OUT}" -p tcp --tcp-flags RST RST -j DROP 2>/dev/null
+  while handle=$(sudo nft -a list chain bridge filter FORWARD 2>/dev/null | awk '/comment "phantompi-spoof-rst"/ { for (i = 1; i <= NF; i++) if ($i == "handle") { print $(i + 1); exit } }') && [ -n "$handle" ]; do
+    sudo nft delete rule bridge filter FORWARD handle "$handle" 2>/dev/null || break
+  done
 
   # Remove virtual interface pair
   if ip link show "$VETH_IN" &>/dev/null; then
@@ -615,12 +630,18 @@ while [ "$#" -gt 0 ]; do
         --timeout) TIMEOUT="$2"; TIMEOUT_EXPLICIT=true; shift 2;;
         --force) FORCE_CAPTURE=true; shift;;
         --last-spoofed) LAST_SPOOFED=true; shift;;
+        --suppress-target-rst) SUPPRESS_TARGET_RST=true; shift;;
         --clean) cleanup;;
         --help) usage;;
         --debug) DEBUG=true; shift;;
         *) echo "[!] Error: Unknown or unexpected argument '$1'." >&2; usage;;
     esac
 done
+
+if $SUPPRESS_TARGET_RST && ! command -v nft &> /dev/null; then
+  echo "[!] Tool 'nft' not found (required by --suppress-target-rst)." >&2
+  exit 1
+fi
 
 # Offline mode requires mergecap (checked here after args are parsed)
 if ! $LIVE_CAPTURE && ! $LAST_SPOOFED; then

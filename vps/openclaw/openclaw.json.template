@@ -34,18 +34,14 @@
                 "allowFrom": [__DM_USERS__]
             },
             "historyLimit": 15,
-            "streaming": "on",
             "textChunkLimit": 2000
         }
     },
 
     "agents": {
         "defaults": {
-            "model": "anthropic/claude-sonnet-4-6",
-            "skills": ["bridge-sync", "cred-sniffer", "implant-status", "pivot"],
-            "params": {
-                "cacheRetention": "long"
-            }
+            "model": "__OPENCLAW_MODEL__",
+            "skills": ["bridge-sync", "cred-sniffer", "implant-status", "pivot"]
         }
     },
 

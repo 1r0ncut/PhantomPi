@@ -25,9 +25,11 @@
     },
 
     "keepalive": {
-        "_comment": "WireGuard reachability monitor. server_ip is the VPN-side IP of the WG server.",
+        "_comment": "WireGuard reachability monitor. After a failed ping batch, reboot the LTE modem and retry before rebooting the implant.",
         "ping_attempts": 10,
-        "server_ip": "10.8.0.1"
+        "server_ip": "10.8.0.1",
+        "modem_reboot_attempts": 1,
+        "modem_reboot_wait_seconds": 60
     },
 
     "lte": {
@@ -45,9 +47,10 @@
     },
 
     "openclaw": {
-        "_comment": "OpenClaw webhook for real-time alerts. Get webhook URL and token from VPS setup output. alert_channel_id must be the Discord channel ID (numeric), not the name. Set notify_bridge/notify_creds to 'no' to disable individually.",
+        "_comment": "OpenClaw webhook for real-time alerts. redact_secrets defaults to yes so Discord/OpenClaw alerts explicitly show [REDACTED] instead of credentials, tokens, or hashes; local findings keep the original values.",
         "notify_bridge": "yes",
         "notify_creds": "yes",
+        "redact_secrets": "yes",
         "webhook_url": "",
         "webhook_token": "",
         "alert_channel_id": ""

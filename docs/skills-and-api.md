@@ -128,7 +128,7 @@ Add the skill name to the `skills` list in `/home/openclaw/.openclaw/openclaw.js
 ```json
 "agents": {
     "defaults": {
-        "model": "anthropic/claude-sonnet-4-6",
+        "model": "openai/gpt-5.4-mini",
         "skills": ["implant-status", "cred-sniffer", "bridge-sync", "my-skill"]
     }
 }

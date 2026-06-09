@@ -2,8 +2,9 @@
     "_readme": "VPS WireGuard & OpenClaw — Configuration. Fill values below, then run: sudo bash setup.sh",
 
     "openclaw": {
-        "_comment": "OpenClaw AI assistant. Bot token from https://discord.com/developers/applications. API key from https://console.anthropic.com/",
-        "anthropic_api_key": "",
+        "_comment": "OpenClaw AI assistant. Bot token from Discord and API key from OpenAI. Leave hooks_token and gateway_token empty to generate secure values automatically.",
+        "openai_api_key": "",
+        "model": "openai/gpt-5.4-mini",
         "discord_bot_token": "",
         "discord_guild_id": "",
         "discord_admin_user_id": "",
@@ -12,6 +13,7 @@
         "discord_alert_channel_id": "",
         "discord_chat_channel": "phantompi-chat",
         "hooks_token": "",
+        "gateway_token": "",
         "implant_ips": ["10.8.0.3"]
     },
 

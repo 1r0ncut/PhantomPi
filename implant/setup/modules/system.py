@@ -19,7 +19,7 @@ from .ui import UI
 # ---------------------------------------------------------------------------
 APT_PACKAGES = [
     # Networking & bridge
-    "bridge-utils", "ethtool", "ebtables", "arptables", "iptables",
+    "bridge-utils", "ethtool", "ebtables", "arptables", "iptables", "nftables",
     "net-tools", "tcpdump", "tshark", "curl", "dnsutils",
     # WireGuard
     "wireguard", "wireguard-tools",

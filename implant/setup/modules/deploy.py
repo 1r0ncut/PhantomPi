@@ -10,9 +10,13 @@ PhantomPi Setup — File Deployment
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
 import stat
+from collections import Counter
+from datetime import datetime, timezone
 
 from .config import get, get_implant_ip
 from .ui import UI
@@ -51,6 +55,19 @@ _HELPER_LINKS = {
     "modem-config":   "/opt/implant/scripts/modem-config.sh",
     "spoof-target":   "/opt/implant/scripts/spoof-target.sh",
 }
+
+# Files left behind by the pre-traffic-analyzer credential pipeline.
+_LEGACY_CRED_ANALYZER_PATHS = [
+    "/opt/implant/scripts/cred-analyzer.py",
+    "/opt/implant/services/cred-analyzer.service",
+    "/opt/implant/timers/cred-analyzer.timer",
+    "/opt/implant/logs/cred-analyzer",
+    "/etc/logrotate.d/cred-analyzer",
+]
+
+_LEGACY_FINDINGS_FILE = "/opt/implant/logs/cred-analyzer/findings.json"
+_TRAFFIC_FINDINGS_FILE = "/opt/implant/logs/traffic-analyzer/findings.json"
+_TRAFFIC_STATE_FILE = "/opt/implant/logs/traffic-analyzer/state.json"
 
 
 # ---------------------------------------------------------------------------
@@ -92,19 +109,112 @@ def deploy_files(repo_dir: str, ui: UI) -> None:
 
     ui.success("Implant files deployed")
 
-    # ── Patch wg-keepalive.timer interval ─────────────────────────────────
-    # The repo ships OnUnitActiveSec=1min, but the safe interval per the
-    # documentation is 1h.  At 1min the keepalive script (which reboots on
-    # failure) runs far too aggressively.
-    timer_path = "/opt/implant/timers/wg-keepalive.timer"
-    if os.path.isfile(timer_path):
-        with open(timer_path, "r") as fh:
-            content = fh.read()
-        patched = content.replace("OnUnitActiveSec=1min", "OnUnitActiveSec=1h")
-        if patched != content:
-            with open(timer_path, "w") as fh:
-                fh.write(patched)
-            ui.success("wg-keepalive.timer interval corrected to 1h")
+    # Removed repository files survive copytree upgrades, so migrate any
+    # unique findings and clean the analyzer that traffic-analyzer replaced.
+    ui.info("Cleaning legacy cred-analyzer deployment ...")
+    ui.run(
+        "systemctl stop cred-analyzer.timer cred-analyzer.service "
+        "2>/dev/null || true",
+        check=False,
+    )
+    ui.run(
+        "systemctl disable cred-analyzer.timer cred-analyzer.service "
+        "2>/dev/null || true",
+        check=False,
+    )
+    ui.run(
+        "systemctl unlink cred-analyzer.timer cred-analyzer.service "
+        "2>/dev/null || true",
+        check=False,
+    )
+    migration_ok = _migrate_legacy_findings(ui)
+    for path in _LEGACY_CRED_ANALYZER_PATHS:
+        if path == "/opt/implant/logs/cred-analyzer" and not migration_ok:
+            continue
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        elif os.path.exists(path) or os.path.islink(path):
+            os.remove(path)
+    ui.success("Legacy cred-analyzer deployment removed")
+
+
+def _load_findings(path: str) -> list[dict]:
+    if not os.path.isfile(path):
+        return []
+    with open(path, "r") as fh:
+        data = json.load(fh)
+    findings = data.get("findings", []) if isinstance(data, dict) else data
+    if not isinstance(findings, list):
+        raise TypeError(f"Invalid findings format in {path}")
+    return findings
+
+
+def _finding_hash(finding: dict) -> str:
+    if finding.get("hash"):
+        return finding["hash"]
+    key = (
+        f"{finding.get('type', '')}|{finding.get('protocol', '')}|"
+        f"{finding.get('username', '')}|{finding.get('secret', '')}|"
+        f"{finding.get('url', '')}"
+    )
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def _migrate_legacy_findings(ui: UI) -> bool:
+    """Merge unique cred-analyzer findings into traffic-analyzer before cleanup."""
+    if not os.path.isfile(_LEGACY_FINDINGS_FILE):
+        return True
+
+    try:
+        legacy = _load_findings(_LEGACY_FINDINGS_FILE)
+        current = _load_findings(_TRAFFIC_FINDINGS_FILE)
+
+        seen = {_finding_hash(finding) for finding in current}
+        migrated = 0
+        for raw_finding in legacy:
+            finding = dict(raw_finding)
+            finding_hash = _finding_hash(finding)
+            if finding_hash in seen:
+                continue
+            finding["hash"] = finding_hash
+            current.append(finding)
+            seen.add(finding_hash)
+            migrated += 1
+
+        os.makedirs(os.path.dirname(_TRAFFIC_FINDINGS_FILE), exist_ok=True)
+        doc = {
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "total_count": len(current),
+            "by_type": dict(Counter(f.get("type", "unknown") for f in current)),
+            "by_protocol": dict(Counter(f.get("protocol", "unknown") for f in current)),
+            "findings": current,
+        }
+        findings_tmp = _TRAFFIC_FINDINGS_FILE + ".tmp"
+        with open(findings_tmp, "w") as fh:
+            json.dump(doc, fh, indent=2)
+        os.replace(findings_tmp, _TRAFFIC_FINDINGS_FILE)
+
+        state = {"files": {}, "seen": []}
+        if os.path.isfile(_TRAFFIC_STATE_FILE):
+            try:
+                with open(_TRAFFIC_STATE_FILE, "r") as fh:
+                    loaded_state = json.load(fh)
+                if isinstance(loaded_state, dict):
+                    state = loaded_state
+            except (json.JSONDecodeError, OSError):
+                pass
+        state["seen"] = list(set(state.get("seen", [])) | seen)
+        state_tmp = _TRAFFIC_STATE_FILE + ".tmp"
+        with open(state_tmp, "w") as fh:
+            json.dump(state, fh)
+        os.replace(state_tmp, _TRAFFIC_STATE_FILE)
+
+        ui.success(f"Migrated {migrated} unique legacy credential findings")
+        return True
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
+        ui.warning(f"Could not migrate legacy credential findings: {exc}")
+        ui.warning("Preserving /opt/implant/logs/cred-analyzer for manual recovery")
+        return False
 
 
 def create_log_dirs(ui: UI) -> None:
@@ -205,6 +315,7 @@ def generate_config_env(config: dict, ui: UI) -> None:
         "# --- OpenClaw Notifications ---",
         f'OPENCLAW_NOTIFY_BRIDGE="{get(config, "openclaw", "notify_bridge", default="yes")}"',
         f'OPENCLAW_NOTIFY_CREDS="{get(config, "openclaw", "notify_creds", default="yes")}"',
+        f'OPENCLAW_REDACT_SECRETS="{get(config, "openclaw", "redact_secrets", default="yes")}"',
         f'OPENCLAW_WEBHOOK_URL="{get(config, "openclaw", "webhook_url", default="")}"',
         f'OPENCLAW_WEBHOOK_TOKEN="{get(config, "openclaw", "webhook_token", default="")}"',
         f'OPENCLAW_ALERT_CHANNEL_ID="{get(config, "openclaw", "alert_channel_id", default="")}"',
@@ -212,6 +323,9 @@ def generate_config_env(config: dict, ui: UI) -> None:
         "# --- WireGuard Keepalive ---",
         f'WG_PING_ATTEMPTS={get(config, "keepalive", "ping_attempts", default=10)}',
         f'WG_SERVER_IP="{get(config, "keepalive", "server_ip", default="10.8.0.1")}"',
+        f'WG_MODEM_REBOOT_ATTEMPTS={get(config, "keepalive", "modem_reboot_attempts", default=1)}',
+        f'WG_MODEM_REBOOT_WAIT_SECONDS={get(config, "keepalive", "modem_reboot_wait_seconds", default=60)}',
+        f'LTE_SERIAL_DEVICE="{get(config, "lte", "serial_device", default="/dev/ttyUSB2")}"',
         'WG_KEEPALIVE_LOG="/opt/implant/logs/wg-keepalive/wg-keepalive.log"',
     ]
 

@@ -4,7 +4,8 @@ After=packet-sniffer.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/implant/scripts/traffic-analyzer.py
 EnvironmentFile=/opt/implant/config.env
+ExecCondition=/bin/bash -c 'ip link show "$BRIDGE" >/dev/null 2>&1'
+ExecStart=/usr/bin/python3 /opt/implant/scripts/traffic-analyzer.py
 StandardOutput=journal
 StandardError=journal

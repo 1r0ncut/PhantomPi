@@ -38,8 +38,12 @@ _SYSTEMD_UNITS: dict[str, str] = {
 # Timers to ALWAYS enable at boot (safe regardless of config)
 _ENABLE_TIMERS_ALWAYS = [
     "bridge-sync.timer",
-    "traffic-analyzer.timer",
     "power-monitor.timer",
+]
+
+# Timers controlled by bridge-sync rather than enabled at boot.
+_BRIDGE_MANAGED_TIMERS = [
+    "traffic-analyzer.timer",
 ]
 
 # Timer that must ONLY be enabled when WireGuard is fully configured,
@@ -174,6 +178,14 @@ def configure_systemd(ui: UI, *, wg_configured: bool = False) -> None:
     """
     ui.info("Registering systemd units ...")
 
+    # Clear legacy boot enablement before linking units. Disabling a linked
+    # unit removes its systemd link, so doing this afterward would make the
+    # bridge-managed timer impossible to start.
+    for timer in _BRIDGE_MANAGED_TIMERS:
+        ui.run(f"systemctl disable --now {timer} 2>/dev/null || true", check=False)
+        service = timer.removesuffix(".timer") + ".service"
+        ui.run(f"systemctl stop {service} 2>/dev/null || true", check=False)
+
     for unit_name, source in _SYSTEMD_UNITS.items():
         if not os.path.isfile(source):
             ui.debug(f"  {unit_name}: source not found ({source}), skipping")
@@ -207,6 +219,8 @@ def configure_systemd(ui: UI, *, wg_configured: bool = False) -> None:
         source = _SYSTEMD_UNITS.get(timer)
         if source and os.path.isfile(source):
             ui.run(f"systemctl enable {source} 2>/dev/null || true", check=False)
+
+    ui.success("Bridge-managed analyzer timers left disabled at boot")
 
     # wg-keepalive only when the VPN is ready (prevents reboot loop)
     wg_timer_source = _SYSTEMD_UNITS.get(_WG_KEEPALIVE_TIMER, "")
@@ -492,5 +506,3 @@ def setup_wittypi(config: dict, ui: UI) -> bool:
 
     ui.warning("Witty Pi daemon registration failed")
     return False
-
-

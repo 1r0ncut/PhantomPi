@@ -93,7 +93,37 @@ bridge_exists() {
     ip link show "$BRIDGE" &>/dev/null
 }
 
+start_traffic_analyzer() {
+    if ! systemctl cat traffic-analyzer.timer &>/dev/null; then
+        log "Registering missing traffic-analyzer.timer"
+        if ! systemctl link /opt/implant/timers/traffic-analyzer.timer ||
+           ! systemctl daemon-reload; then
+            log "Failed to register traffic-analyzer.timer"
+            return 0
+        fi
+    fi
+
+    if ! systemctl is-active --quiet traffic-analyzer.timer; then
+        log "Starting traffic-analyzer.timer (bridge mode active)"
+        if ! systemctl start traffic-analyzer.timer; then
+            log "Failed to start traffic-analyzer.timer"
+        fi
+    fi
+}
+
+stop_traffic_analyzer() {
+    if systemctl is-active --quiet traffic-analyzer.timer || \
+       systemctl is-active --quiet traffic-analyzer.service; then
+        log "Stopping traffic analyzer (bridge mode inactive)"
+        if ! systemctl stop traffic-analyzer.timer traffic-analyzer.service; then
+            log "Failed to stop traffic analyzer"
+        fi
+    fi
+}
+
 delete_bridge() {
+    stop_traffic_analyzer
+
     if bridge_exists; then
         log "Deleting bridge $BRIDGE"
         ip link set "$BRIDGE" down
@@ -133,6 +163,11 @@ delete_bridge() {
         sudo iptables -D OUTPUT -o "$VETH_OUT" -p tcp --tcp-flags RST RST -j DROP
     fi
 
+    while handle=$(sudo nft -a list chain bridge filter FORWARD 2>/dev/null | awk '/comment "phantompi-spoof-rst"/ { for (i = 1; i <= NF; i++) if ($i == "handle") { print $(i + 1); exit } }') && [ -n "$handle" ]; do
+        log "Removing nftables rule blocking target TCP RST"
+        sudo nft delete rule bridge filter FORWARD handle "$handle" 2>/dev/null || break
+    done
+
 }
 
 create_bridge() {
@@ -148,6 +183,7 @@ create_bridge() {
     ip link set "$BRIDGE" up
     echo 8 | tee "/sys/class/net/$BRIDGE/bridge/group_fwd_mask" > /dev/null
 
+    start_traffic_analyzer
     notify_openclaw "created" "$BRIDGE"
 }
 
@@ -159,6 +195,7 @@ if interface_exists "$IFACE_COMPANY" && interface_exists "$IFACE_TARGET"; then
     if has_carrier "$IFACE_COMPANY" && has_carrier "$IFACE_TARGET"; then
         if bridge_exists; then
             log "Bridge $BRIDGE already exists. No action needed."
+            start_traffic_analyzer
         else
             create_bridge
         fi

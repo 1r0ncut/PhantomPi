@@ -6,4 +6,5 @@ Wants=network.target
 [Service]
 Type=oneshot
 ExecStart=/opt/implant/scripts/wg-keepalive.sh
+TimeoutStartSec=infinity
 User=root

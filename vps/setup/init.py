@@ -151,10 +151,53 @@ def _get(cfg: dict, *keys, default=None):
     return cur
 
 
+def _ensure_discord_plugin(ui: UI) -> None:
+    """Install and explicitly enable the official Discord channel plugin."""
+    env = f"sudo -u {OC_USER} env HOME={OC_HOME}"
+    inspect_cmd = f"{env} openclaw plugins inspect discord --json"
+
+    r = ui.run(inspect_cmd, check=False)
+    if r.returncode != 0:
+        ui.info("Installing OpenClaw Discord plugin ...")
+        ui.run(
+            f"{env} openclaw plugins install @openclaw/discord",
+            timeout=300,
+        )
+    else:
+        ui.success("OpenClaw Discord plugin already installed")
+
+    r = ui.run(inspect_cmd, check=False)
+    if r.returncode != 0:
+        raise RuntimeError(
+            "OpenClaw Discord plugin installation completed but verification failed"
+        )
+
+    ui.info("Enabling OpenClaw Discord plugin ...")
+    ui.run(f"{env} openclaw plugins enable discord")
+
+    r = ui.run(inspect_cmd, check=False)
+    if r.returncode != 0:
+        raise RuntimeError("OpenClaw Discord plugin enablement verification failed")
+    try:
+        plugin = json.loads(r.stdout).get("plugin", {})
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "OpenClaw Discord plugin returned invalid verification output"
+        ) from exc
+    if not plugin.get("enabled"):
+        raise RuntimeError("OpenClaw Discord plugin is installed but not enabled")
+    ui.success("OpenClaw Discord plugin installed and enabled")
+
+
 def _validate(cfg: dict) -> list[str]:
     w: list[str] = []
-    if not _get(cfg, "openclaw", "anthropic_api_key"):
-        w.append("openclaw.anthropic_api_key is empty — OpenClaw will NOT work")
+    if not _get(cfg, "openclaw", "openai_api_key"):
+        w.append("openclaw.openai_api_key is empty — OpenClaw will NOT work")
+    model = _get(cfg, "openclaw", "model", default="")
+    if not isinstance(model, str) or not model:
+        w.append("openclaw.model is empty — OpenClaw will NOT work")
+    elif not model.startswith("openai/"):
+        w.append("openclaw.model should use the OpenAI provider prefix: openai/<model>")
     if not _get(cfg, "openclaw", "discord_bot_token"):
         w.append("openclaw.discord_bot_token is empty — Discord channel will NOT connect")
     if not _get(cfg, "openclaw", "discord_guild_id"):
@@ -337,15 +380,21 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
     # ── Write ~/.openclaw/.env ───────────────────────────────────────
     os.makedirs(OPENCLAW_HOME, exist_ok=True)
 
-    api_key      = _get(cfg, "openclaw", "anthropic_api_key", default="")
+    api_key      = _get(cfg, "openclaw", "openai_api_key", default="")
+    model        = _get(cfg, "openclaw", "model", default="openai/gpt-5.4-mini")
     bot_token    = _get(cfg, "openclaw", "discord_bot_token", default="")
     implant_ips  = _get(cfg, "openclaw", "implant_ips", default=[])
     implant_csv  = ",".join(implant_ips) if isinstance(implant_ips, list) else str(implant_ips)
 
     if not api_key:
         skipped.append(
-            "openclaw.anthropic_api_key is empty — OpenClaw cannot "
+            "openclaw.openai_api_key is empty — OpenClaw cannot "
             "run. Fill init.json and re-run setup."
+        )
+    if not isinstance(model, str) or not model.startswith("openai/"):
+        skipped.append(
+            "openclaw.model must be an OpenAI model such as "
+            "openai/gpt-5.4-mini. Fill init.json and re-run setup."
         )
     if not bot_token:
         skipped.append(
@@ -359,13 +408,20 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
         hooks_token = secrets.token_urlsafe(32)
         ui.info("Auto-generated OpenClaw hooks token")
 
+    # Gateway token — required by OpenClaw when binding to the WireGuard IP
+    gateway_token = _get(cfg, "openclaw", "gateway_token", default="")
+    if not gateway_token:
+        gateway_token = secrets.token_urlsafe(32)
+        ui.info("Auto-generated OpenClaw gateway token")
+
     env_path = os.path.join(OPENCLAW_HOME, ".env")
     ui.info("Writing ~/.openclaw/.env ...")
     with open(env_path, "w") as fh:
-        fh.write(f"ANTHROPIC_API_KEY={api_key}\n")
+        fh.write(f"OPENAI_API_KEY={api_key}\n")
         fh.write(f"DISCORD_BOT_TOKEN={bot_token}\n")
         fh.write(f"IMPLANT_IPS={implant_csv}\n")
         fh.write(f"OPENCLAW_HOOKS_TOKEN={hooks_token}\n")
+        fh.write(f"OPENCLAW_GATEWAY_TOKEN={gateway_token}\n")
     os.chmod(env_path, 0o600)
     ui.success(".env written (permissions 600)")
     alert_channel_id = _get(cfg, "openclaw", "discord_alert_channel_id", default="")
@@ -422,6 +478,9 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
         config_str = config_str.replace("__CHAT_CHANNEL_NAME__", chat_ch)
         config_str = config_str.replace("__HOOKS_TOKEN__", hooks_token)
         config_str = config_str.replace("__GATEWAY_HOST__", wg_ip)
+        config_str = config_str.replace(
+            "__OPENCLAW_MODEL__", json.dumps(model)[1:-1]
+        )
 
         config_path = os.path.join(OPENCLAW_HOME, "openclaw.json")
         ui.info("Writing ~/.openclaw/openclaw.json ...")
@@ -469,6 +528,11 @@ def step_openclaw(cfg: dict, ui: UI, skipped: list) -> None:
             ui.info(f"Setting ownership of {oc_pkg} to {OC_USER} ...")
             ui.run(f"chown -R {OC_USER}:{OC_USER} {oc_pkg}", check=False)
             ui.success(f"Plugin directory ownership fixed")
+
+    # Plugin commands run as the service user and need access to the config
+    # and state files written earlier in this step.
+    ui.run(f"chown -R {OC_USER}:{OC_USER} {OC_HOME}", check=False)
+    _ensure_discord_plugin(ui)
 
     # ── Deploy shared scripts to ~/scripts/ ──────────────────────────
     scripts_src = os.path.join(REPO_DIR, "openclaw", "scripts")
@@ -547,11 +611,12 @@ def step_daemon(cfg: dict, ui: UI, skipped: list) -> None:
     # that requires a D-Bus login session.  Our openclaw user is a
     # system account with nologin shell — no session.  We write a
     # proper system unit that runs the gateway as the openclaw user.
-    api_key = _get(cfg, "openclaw", "anthropic_api_key", default="")
-    if not api_key:
+    api_key = _get(cfg, "openclaw", "openai_api_key", default="")
+    model = _get(cfg, "openclaw", "model", default="")
+    if not api_key or not isinstance(model, str) or not model.startswith("openai/"):
         skipped.append(
-            "OpenClaw gateway NOT started — API key missing. "
-            "After filling init.json and re-run setup."
+            "OpenClaw gateway NOT started — a valid OpenAI API key and "
+            "openai/<model> are required. Fill init.json and re-run setup."
         )
         return
 

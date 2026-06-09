@@ -33,6 +33,8 @@ If `sniffer` is `"inactive"`, tell the operator.
 2. For hashes, always include hashcat mode and one-liner.
 3. Flag high-value accounts: Domain Admin, service accounts, `admin`, `root`.
 4. Never truncate the `secret` field.
+5. For HTTP findings, include the `url` field when present.
+6. Treat `secret=[REDACTED]` as intentional implant-side alert redaction for credentials, tokens, and hashes. Do not claim the secret was unavailable; tell the operator it remains in the implant's stored findings.
 
 ## Webhook alerts (cred-alert)
 
@@ -41,7 +43,7 @@ Messages starting with `cred-alert:` are automated push notifications from the c
 Format:
 ```
 cred-alert: implant=10.8.0.3 count=2
-protocol=HTTP Basic Auth | type=cleartext | user=admin | secret=P@ssw0rd | src=192.168.1.50:49312 | dst=192.168.1.10:80
+protocol=HTTP Basic Auth | type=cleartext | user=admin | secret=[REDACTED] | src=192.168.1.50:49312 | dst=192.168.1.10:80 | url=http://app.internal/login
 ```
 
 Discord template:

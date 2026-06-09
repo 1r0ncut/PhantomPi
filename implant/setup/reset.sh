@@ -75,6 +75,7 @@ UNITS=(
     bridge-sync.timer   bridge-sync.service
     power-monitor.timer power-monitor.service
     traffic-analyzer.timer traffic-analyzer.service
+    cred-analyzer.timer cred-analyzer.service
     implant-api.service
     packet-sniffer.service
     hidden-hotspot.service
@@ -95,6 +96,7 @@ UNITS=(
     implant-api.service
     hidden-hotspot.service
     traffic-analyzer.service traffic-analyzer.timer
+    cred-analyzer.service cred-analyzer.timer
     packet-sniffer.service
     power-monitor.service power-monitor.timer
     wg-keepalive.service  wg-keepalive.timer
@@ -194,6 +196,7 @@ success "Boot hardening removed"
 info "Removing logrotate configurations ..."
 rm -f /etc/logrotate.d/bridge-sync
 rm -f /etc/logrotate.d/traffic-analyzer
+rm -f /etc/logrotate.d/cred-analyzer
 rm -f /etc/logrotate.d/wg-keepalive
 rm -f /etc/logrotate.d/power-monitor
 success "Logrotate configs removed"
